@@ -9,12 +9,20 @@
   <script src="https://cdn.tailwindcss.com"></script>
   
   <style>
-    /* A4 列印排版控制：列印時自動隱藏按鈕、選單與核取方塊，並顯示列印時間戳記 */
+    /* A4 列印排版控制：列印時只顯示甘特圖與對照表，隱藏個案卡片與控制項 */
     @media print {
       .no-print { display: none !important; }
+      #project-cards-section { display: none !important; } /* 隱藏卡片區塊，防止列印壓縮 */
+      #report-top-section { 
+        display: block !important; 
+        margin: 0 !important; 
+        padding: 0 !important; 
+        border: none !important; 
+        box-shadow: none !important; 
+      }
       .print-header { display: block !important; }
-      body { background: white; padding: 0; }
-      .card { border: 1px solid #cbd5e1; break-inside: avoid; margin-bottom: 12px; shadow: none; }
+      body { background: white !important; padding: 0 !important; }
+      .print-section { break-inside: avoid; }
     }
   </style>
 </head>
@@ -46,8 +54,19 @@
     </div>
   </div>
 
+  <!-- 📍 右側浮動快捷按鈕 (至最頂端 / 至最底部) -->
+  <div class="fixed right-4 bottom-8 flex flex-col gap-2 z-50 no-print">
+    <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" title="移至最上面" class="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center justify-center font-bold text-sm transition transform hover:scale-110">
+      ▲
+    </button>
+    <button onclick="window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'})" title="移至最下面" class="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center justify-center font-bold text-sm transition transform hover:scale-110">
+      ▼
+    </button>
+  </div>
+
   <!-- 主系統容器 -->
   <div id="main-app" class="max-w-4xl mx-auto hidden">
+    
     <!-- A4 列印專用標題與時間戳記 -->
     <div class="print-header hidden mb-4 pb-2 border-b-2 border-slate-800">
       <h2 class="text-xl font-bold text-slate-900">📋 案件管理系統 - 開會報表</h2>
@@ -57,14 +76,17 @@
     <!-- 頂部登入資訊與操作列 -->
     <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 no-print">
       <div>
-        <div class="flex items-center gap-3">
-          <h1 class="text-2xl font-bold text-slate-900">📋 案件管理系統</h1>
+        <h1 class="text-2xl font-bold text-slate-900">📋 案件管理系統</h1>
+        <div class="flex flex-wrap items-center gap-2 mt-1">
           <span id="user-badge" class="bg-indigo-100 text-indigo-800 text-xs px-2.5 py-1 rounded-full font-semibold"></span>
+          <p class="text-sm text-slate-500">勾選案件可快速產生 LINE 進度回報或列印開會報表</p>
         </div>
-        <p class="text-sm text-slate-500 mt-0.5">勾選案件可快速產生 LINE 進度回報或列印開會報表</p>
       </div>
 
-      <div class="flex flex-wrap gap-2 items-center">
+      <div class="flex flex-wrap gap-2 items-center justify-end sm:ml-auto">
+        <button id="btn-toggle-gantt-panel" onclick="toggleGanttPanel()" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-lg shadow text-sm font-medium transition flex items-center gap-1">
+          📊 甘特圖設定
+        </button>
         <button id="btn-add-project" onclick="openAddProjectModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg shadow text-sm font-medium transition flex items-center gap-1">
           ➕ 新增案件
         </button>
@@ -74,12 +96,28 @@
         <button onclick="triggerPrint()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-lg shadow text-sm font-medium transition flex items-center gap-1">
           🖨️ 列印 A4
         </button>
-        <button onclick="openChangePwdModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition">
-          🔑 改密碼
-        </button>
-        <button onclick="handleLogout()" class="bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-2 rounded-lg text-sm font-medium transition">
-          🚪 登出
-        </button>
+        <!-- 改密碼與登出放在同一組 flex 中保持同一行 -->
+        <div class="flex items-center gap-2">
+          <button onclick="openChangePwdModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition">
+            🔑 改密碼
+          </button>
+          <button onclick="handleLogout()" class="bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-2 rounded-lg text-sm font-medium transition">
+            🚪 登出
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 📊 甘特圖排程設定控制抽屜 (手機友善，列印時隱藏) -->
+    <div id="gantt-setup-panel" class="hidden no-print bg-purple-50 border border-purple-200 p-4 rounded-xl mb-4 shadow-inner">
+      <div class="flex justify-between items-center mb-3">
+        <h3 class="font-bold text-purple-900 flex items-center gap-1 text-base">
+          📊 甘特圖顯示與工期調整 (點選日期或使用快捷按鈕)
+        </h3>
+        <button onclick="toggleGanttPanel()" class="text-purple-400 hover:text-purple-700 font-bold text-sm">收合 ✖</button>
+      </div>
+      <div id="gantt-controls-container" class="space-y-2.5 max-h-60 overflow-y-auto pr-1">
+        <!-- JS 動態生成項目設定列 -->
       </div>
     </div>
 
@@ -89,10 +127,8 @@
         <label class="text-sm font-bold text-slate-700 whitespace-nowrap">📅 檢視模式：</label>
         <select id="snapshot-select" onchange="handleSnapshotChange()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
           <option value="current">🟢 目前最新狀態 (可編輯)</option>
-          <!-- JS 動態填入歷史快照選項 -->
         </select>
       </div>
-      <!-- 🗑️ 刪除/移除快照按鈕 (切換到歷史快照時顯示) -->
       <button id="btn-delete-snapshot" onclick="deleteSelectedSnapshot()" class="hidden bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium transition whitespace-nowrap flex items-center justify-center gap-1 shadow-sm">
         🗑️ 移除此快照
       </button>
@@ -105,7 +141,6 @@
 
     <!-- 🔍 案件篩選工具列 -->
     <div class="bg-white p-3.5 rounded-xl shadow-sm border border-slate-200 mb-4 flex flex-wrap items-center gap-3.5 no-print">
-      <!-- 全選 Checkbox -->
       <label class="flex items-center gap-2 font-semibold text-sm text-slate-700 cursor-pointer select-none">
         <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
         <span>全選</span>
@@ -113,7 +148,6 @@
 
       <div class="h-5 w-px bg-slate-200"></div>
 
-      <!-- 承辦人篩選 (JS 動態讀取有綁定 LINE 的成員) -->
       <div class="flex items-center gap-2">
         <label for="filterAssignee" class="text-sm font-bold text-slate-700 whitespace-nowrap">承辦：</label>
         <select id="filterAssignee" onchange="filterProjects()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
@@ -121,7 +155,6 @@
         </select>
       </div>
 
-      <!-- 送審單位篩選 -->
       <div class="flex items-center gap-2">
         <label for="filterAgency" class="text-sm font-bold text-slate-700 whitespace-nowrap">單位：</label>
         <select id="filterAgency" onchange="filterProjects()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
@@ -131,7 +164,6 @@
         </select>
       </div>
 
-      <!-- 關鍵字搜尋 -->
       <div class="flex-1 min-w-[200px]">
         <input type="text" id="filterKeyword" oninput="filterProjects()" placeholder="🔍 輸入關鍵字搜尋案件名稱、狀態或聯絡人..." class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
       </div>
@@ -142,14 +174,60 @@
       <span class="text-base">📱</span>
       <div>
         <strong class="font-semibold">承辦人 LINE 週報機器人提醒：</strong>
-        首次加入 LINE 官方帳號時，請直接在對話框輸入<strong>「您的承辦名稱」（例如：<code>周東震</code>）</strong>進行綁定。系統將於每週最後工作日 14:30 自動推播個人週報摘要！
+        首次加入 LINE 官方帳號時，請直接在對話框輸入<strong>「您的承辦名稱」</strong>進行綁定。系統將於每週最後工作日 14:30 自動推播個人週報摘要！
       </div>
     </div>
 
-    <!-- 案件列表容器 -->
-    <div id="project-list" class="space-y-4">
-      <div class="text-center py-10 text-slate-400">連線至資料庫載入中...</div>
+    <!-- ==================== 1. 個案詳細內容卡片 (螢幕畫面主要顯示區) ==================== -->
+    <div id="project-cards-section" class="mb-6">
+      <!-- 案件列表容器 -->
+      <div id="project-list" class="space-y-4">
+        <div class="text-center py-10 text-slate-400">連線至資料庫載入中...</div>
+      </div>
     </div>
+
+    <!-- ==================== 2. 近期重點案件與排程甘特圖 (置於畫面最下方，A4列印專用) ==================== -->
+    <div id="report-top-section" class="mb-6 bg-white p-5 rounded-xl border border-slate-200 shadow-sm print-section">
+      <h2 class="text-base font-bold text-slate-900 mb-3 border-l-4 border-indigo-600 pl-2">
+         近期重點案件與排程甘特圖
+      </h2>
+
+      <!-- 2.1 案件總覽對照表 -->
+      <div class="overflow-x-auto mb-4">
+        <table class="w-full text-left text-sm border-collapse border border-slate-200">
+          <thead>
+            <tr class="bg-slate-100 text-slate-700">
+              <th class="p-2 border border-slate-200 w-1/3">案名</th>
+              <th class="p-2 border border-slate-200 w-1/6">送審單位</th>
+              <th class="p-2 border border-slate-200 w-1/6">目前階段</th>
+              <th class="p-2 border border-slate-200">最新大事記</th>
+            </tr>
+          </thead>
+          <tbody id="summary-table-body">
+            <!-- JS 動態填入 -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- 2.2 甘特圖呈現區 -->
+      <div class="border border-slate-200 rounded-lg p-3.5 bg-slate-50">
+        <div class="flex justify-between items-center text-xs font-bold text-slate-500 mb-2">
+          <span>📅 近期執行案件甘特圖</span>
+          <span id="gantt-time-range-text">時間跨度：載入中...</span>
+        </div>
+
+        <!-- 時間軸標頭 -->
+        <div id="gantt-timeline-header" class="grid grid-cols-6 gap-1 text-center text-xs font-semibold text-slate-600 border-b pb-1.5 mb-2">
+          <!-- JS 動態填入月/週標籤 -->
+        </div>
+
+        <!-- 圖塊內容區 -->
+        <div id="gantt-bars-container" class="space-y-2">
+          <!-- JS 動態生成條狀圖 -->
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- Modal 1: 新增案件彈窗 -->
@@ -424,6 +502,12 @@
     let currentSelectedSnapshotId = null; // 當前選取的快照 ID
     let isReadOnlyMode = false;
 
+    // 可用的甘特圖圖塊色彩清單
+    const ganttColors = [
+      'bg-indigo-500', 'bg-blue-500', 'bg-emerald-500', 
+      'bg-amber-500', 'bg-purple-500', 'bg-teal-500', 'bg-rose-500'
+    ];
+
     // 初始化檢查 Session
     document.addEventListener("DOMContentLoaded", () => {
       const savedUser = localStorage.getItem('app_user_session');
@@ -476,39 +560,21 @@
       fetchProjects();
     }
 
-    // 🛠️ 動態設定承辦人選單：僅抓取 users_line 中成功綁定 LINE 的成員，完全移除預設測試名稱
+    // 🛠️ 動態設定承辦人選單
     async function setupAssigneeDropdowns() {
       const filterAssignee = document.getElementById('filterAssignee');
       const newAssignee = document.getElementById('new-assignee');
       const editAssignee = document.getElementById('edit-assignee');
 
       if (currentUser.role !== 'admin') {
-        // 一般成員：選單只能看到自己且固定選取自己
         const userOption = `<option value="${currentUser.name}">${currentUser.name}</option>`;
-        
-        if (filterAssignee) {
-          filterAssignee.innerHTML = userOption;
-          filterAssignee.value = currentUser.name;
-          filterAssignee.disabled = true;
-        }
-        if (newAssignee) {
-          newAssignee.innerHTML = userOption;
-          newAssignee.value = currentUser.name;
-          newAssignee.disabled = true;
-        }
-        if (editAssignee) {
-          editAssignee.innerHTML = userOption;
-          editAssignee.value = currentUser.name;
-          editAssignee.disabled = true;
-        }
+        if (filterAssignee) { filterAssignee.innerHTML = userOption; filterAssignee.value = currentUser.name; filterAssignee.disabled = true; }
+        if (newAssignee) { newAssignee.innerHTML = userOption; newAssignee.value = currentUser.name; newAssignee.disabled = true; }
+        if (editAssignee) { editAssignee.innerHTML = userOption; editAssignee.value = currentUser.name; editAssignee.disabled = true; }
       } else {
-        // 001 管理員：僅抓取 users_line (已綁定 LINE 帳號) 的承辦人姓名
         let assigneeSet = new Set();
-
-        // 確保管理者自身在選單內
         if (currentUser.name) assigneeSet.add(currentUser.name);
 
-        // 查詢 users_line 表
         try {
           const { data: lineData, error } = await supabaseClient.from('users_line').select('handler_name');
           if (!error && lineData) {
@@ -524,27 +590,41 @@
 
         const assigneeList = Array.from(assigneeSet);
 
-        // 填入頂部篩選選單
         if (filterAssignee) {
           filterAssignee.disabled = false;
           let filterHtml = '<option value="">全部承辦人</option>';
-          assigneeList.forEach(name => {
-            filterHtml += `<option value="${name}">${name}</option>`;
-          });
+          assigneeList.forEach(name => filterHtml += `<option value="${name}">${name}</option>`);
           filterAssignee.innerHTML = filterHtml;
         }
 
-        // 填入新增/編輯 Modal 彈窗選單
         const modalHtml = assigneeList.map(name => `<option value="${name}">${name}</option>`).join('');
-        if (newAssignee) {
-          newAssignee.disabled = false;
-          newAssignee.innerHTML = modalHtml;
-        }
-        if (editAssignee) {
-          editAssignee.disabled = false;
-          editAssignee.innerHTML = modalHtml;
-        }
+        if (newAssignee) { newAssignee.disabled = false; newAssignee.innerHTML = modalHtml; }
+        if (editAssignee) { editAssignee.disabled = false; editAssignee.innerHTML = modalHtml; }
       }
+    }
+
+    // 確保每筆案件有預設的甘特圖欄位狀態
+    function ensureGanttDefaults(projects) {
+      const todayISO = getTodayISO();
+      projects.forEach((p, idx) => {
+        if (p.inGantt === undefined) p.inGantt = true;
+        
+        if (!p.gantt_start) {
+          if (Array.isArray(p.logs) && p.logs.length > 0) {
+            p.gantt_start = parseCustomDateToISO(p.logs[p.logs.length - 1].date);
+          } else {
+            p.gantt_start = todayISO;
+          }
+        }
+
+        if (!p.gantt_end) {
+          const d = new Date(p.gantt_start);
+          d.setDate(d.getDate() + 30);
+          p.gantt_end = d.toISOString().split('T')[0];
+        }
+
+        p.ganttColor = ganttColors[idx % ganttColors.length];
+      });
     }
 
     // 從 Supabase 抓取案件資料
@@ -566,9 +646,10 @@
         ? data 
         : data.filter(p => p.assignee === currentUser.name);
 
+      ensureGanttDefaults(projectsData);
       renderProjects(projectsData, false);
       fetchSnapshotsList();
-      await setupAssigneeDropdowns(); // 載入案件後，重新讀取 users_line 並填入承辦人選單
+      await setupAssigneeDropdowns();
     }
 
     // 讀取歷史快照選單
@@ -583,15 +664,12 @@
       const select = document.getElementById('snapshot-select');
       select.innerHTML = '<option value="current">🟢 目前最新狀態 (可編輯)</option>';
 
-      // 個人隱藏清單
       const hiddenList = currentUser.role !== 'admin'
         ? JSON.parse(localStorage.getItem('hidden_snapshots_' + currentUser.account) || '[]')
         : [];
 
       data.forEach(s => {
-        if (currentUser.role !== 'admin' && hiddenList.includes(s.id)) {
-          return;
-        }
+        if (currentUser.role !== 'admin' && hiddenList.includes(s.id)) return;
 
         const dateObj = new Date(s.created_at);
         const yyyy = dateObj.getFullYear();
@@ -637,11 +715,11 @@
         currentSelectedSnapshotId = selectedObj.id;
         let snapshotData = selectedObj.snapshot_data || [];
 
-        // 歷史快照權限過濾：一般承辦人僅能看到自己的案件
         if (currentUser.role !== 'admin') {
           snapshotData = snapshotData.filter(p => p.assignee === currentUser.name);
         }
 
+        ensureGanttDefaults(snapshotData);
         notice.classList.remove('hidden');
         btnDeleteSnap.classList.remove('hidden');
         btnAdd.classList.add('hidden');
@@ -656,7 +734,6 @@
       if (!currentSelectedSnapshotId) return;
 
       if (currentUser.role === 'admin') {
-        // 管理者權限：直接從 Supabase 資料庫徹底刪除
         if (confirm('【管理者權限】確定要從資料庫徹底刪除這筆歷史快照嗎？\n(此動作無法復原)')) {
           const { error } = await supabaseClient
             .from('weekly_snapshots')
@@ -671,7 +748,6 @@
           }
         }
       } else {
-        // 一般承辦人：僅對自己隱藏（管理者仍看得見）
         if (confirm('確定要移除這筆歷史快照嗎？\n(移除後您的選單將不再顯示，但 001 管理者仍會保留完整備份)')) {
           let hiddenList = JSON.parse(localStorage.getItem('hidden_snapshots_' + currentUser.account) || '[]');
           if (!hiddenList.includes(currentSelectedSnapshotId)) {
@@ -696,38 +772,201 @@
       const agency = document.getElementById('filterAgency')?.value.toLowerCase().trim() || '';
       const keyword = document.getElementById('filterKeyword')?.value.toLowerCase().trim() || '';
 
-      const cards = document.querySelectorAll('#project-list .card');
+      const visibleProjects = projectsData.filter(p => {
+        const titleStr = (p.title || '').toLowerCase();
+        const statusStr = (p.status || '').toLowerCase();
+        const assigneeStr = (p.assignee || '').toLowerCase();
+        const agencyStr = (p.agency || '').toLowerCase();
+        const contactsStr = (p.contacts || []).map(c => `${c.name}${c.phone}`).join('').toLowerCase();
+        const fullText = `${titleStr} ${statusStr} ${assigneeStr} ${agencyStr} ${contactsStr}`;
 
-      cards.forEach(card => {
-        const text = card.innerText.toLowerCase();
+        const matchAssignee = !assignee || assigneeStr.includes(assignee);
+        const matchAgency = !agency || agencyStr.includes(agency);
+        const matchKeyword = !keyword || fullText.includes(keyword);
 
-        const matchAssignee = !assignee || text.includes(assignee);
-        const matchAgency = !agency || text.includes(agency);
-        const matchKeyword = !keyword || text.includes(keyword);
-
-        if (matchAssignee && matchAgency && matchKeyword) {
-          card.classList.remove('hidden');
-        } else {
-          card.classList.add('hidden');
-        }
+        return matchAssignee && matchAgency && matchKeyword;
       });
 
-      // 重新篩選時重置全選勾選框狀態
+      // 重新渲染報表與卡片
+      renderTopReportSection(visibleProjects);
+      renderProjectCards(visibleProjects, isReadOnlyMode);
+
       const selectAll = document.getElementById('selectAllCheckbox');
       if (selectAll) selectAll.checked = false;
     }
 
-    // ☑ 全選 / 全不選功能（僅作用於當前顯示中的卡片）
+    // 📊 切換甘特圖設定面板展開/收合
+    function toggleGanttPanel() {
+      const panel = document.getElementById('gantt-setup-panel');
+      panel.classList.toggle('hidden');
+    }
+
+    // 渲染甘特圖設定控制項 (手機友善：日期選擇器與快捷 +1週/+2週)
+    function renderGanttSetupControls(projects) {
+      const container = document.getElementById('gantt-controls-container');
+      if (!projects || projects.length === 0) {
+        container.innerHTML = `<div class="text-xs text-purple-400 py-2 text-center">無案件資料</div>`;
+        return;
+      }
+
+      container.innerHTML = projects.map(p => `
+        <div class="bg-white p-2.5 rounded-lg border border-purple-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <label class="flex items-center gap-2 font-bold text-slate-800 min-w-[140px] cursor-pointer">
+            <input type="checkbox" ${p.inGantt ? 'checked' : ''} onchange="toggleProjectGantt(${p.id})" class="w-4 h-4 text-purple-600 rounded">
+            <span>${p.title || '未命名案件'}</span>
+          </label>
+
+          ${p.inGantt ? `
+            <div class="flex flex-wrap items-center gap-2">
+              <span>起：</span>
+              <input type="date" value="${p.gantt_start}" onchange="updateGanttDate(${p.id}, 'gantt_start', this.value)" class="border border-slate-300 rounded px-1.5 py-0.5 text-xs">
+              <span>迄：</span>
+              <input type="date" value="${p.gantt_end}" onchange="updateGanttDate(${p.id}, 'gantt_end', this.value)" class="border border-slate-300 rounded px-1.5 py-0.5 text-xs">
+              
+              <div class="flex gap-1 ml-1">
+                <button type="button" onclick="addGanttWeeks(${p.id}, 1)" class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded hover:bg-purple-200 font-medium">+1週</button>
+                <button type="button" onclick="addGanttWeeks(${p.id}, 2)" class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded hover:bg-purple-200 font-medium">+2週</button>
+              </div>
+            </div>
+          ` : '<span class="text-slate-400">（未繪製於甘特圖）</span>'}
+        </div>
+      `).join('');
+    }
+
+    function toggleProjectGantt(id) {
+      const p = projectsData.find(item => item.id === id);
+      if (p) {
+        p.inGantt = !p.inGantt;
+        filterProjects();
+      }
+    }
+
+    function updateGanttDate(id, field, val) {
+      const p = projectsData.find(item => item.id === id);
+      if (p && val) {
+        p[field] = val;
+        filterProjects();
+      }
+    }
+
+    function addGanttWeeks(id, weeks) {
+      const p = projectsData.find(item => item.id === id);
+      if (p && p.gantt_end) {
+        const d = new Date(p.gantt_end);
+        d.setDate(d.getDate() + (weeks * 7));
+        p.gantt_end = d.toISOString().split('T')[0];
+        filterProjects();
+      }
+    }
+
+    // 渲染對照表與甘特圖 (置於最下方)
+    function renderTopReportSection(projects) {
+      renderGanttSetupControls(projects);
+
+      // 填入對照表
+      const tbody = document.getElementById('summary-table-body');
+      if (projects.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="p-3 text-center text-slate-400 text-xs">無符合案件</td></tr>`;
+      } else {
+        tbody.innerHTML = projects.map(p => {
+          const logs = Array.isArray(p.logs) ? p.logs : [];
+          const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
+          const logText = lastLog ? `<span class="font-bold text-slate-800">${lastLog.date}</span> ${lastLog.event}` : '無紀錄';
+
+          return `
+            <tr class="border-b border-slate-200 hover:bg-slate-50">
+              <td class="p-2 border border-slate-200 font-bold text-slate-800">${p.title || '未命名案件'}</td>
+              <td class="p-2 border border-slate-200 text-xs">${p.agency || '未填'}</td>
+              <td class="p-2 border border-slate-200"><span class="px-2 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700 font-semibold">${p.status || '評估'}</span></td>
+              <td class="p-2 border border-slate-200 text-xs text-slate-600">${logText}</td>
+            </tr>
+          `;
+        }).join('');
+      }
+
+      // 計算並渲染甘特圖條狀圖
+      const ganttContainer = document.getElementById('gantt-bars-container');
+      const timeHeader = document.getElementById('gantt-timeline-header');
+      const rangeText = document.getElementById('gantt-time-range-text');
+
+      const ganttProjects = projects.filter(p => p.inGantt);
+
+      if (ganttProjects.length === 0) {
+        ganttContainer.innerHTML = `<div class="text-xs text-slate-400 py-4 text-center">無勾選納入甘特圖的案件</div>`;
+        timeHeader.innerHTML = `<div>目前無圖表</div>`;
+        rangeText.innerText = `時間跨度：-`;
+        return;
+      }
+
+      // 自動推算時間軸的 min 與 max
+      let minTimestamp = Infinity;
+      let maxTimestamp = -Infinity;
+
+      ganttProjects.forEach(p => {
+        const sTime = new Date(p.gantt_start).getTime();
+        const eTime = new Date(p.gantt_end).getTime();
+        if (sTime < minTimestamp) minTimestamp = sTime;
+        if (eTime > maxTimestamp) maxTimestamp = eTime;
+      });
+
+      // 確保至少有 30 天的時間寬度
+      if (maxTimestamp <= minTimestamp) {
+        maxTimestamp = minTimestamp + (30 * 24 * 3600 * 1000);
+      }
+
+      const totalSpanDays = Math.max(1, (maxTimestamp - minTimestamp) / (24 * 3600 * 1000));
+      const startDateObj = new Date(minTimestamp);
+      const endDateObj = new Date(maxTimestamp);
+
+      rangeText.innerText = `時間跨度：${startDateObj.getFullYear()}/${startDateObj.getMonth()+1}/${startDateObj.getDate()} ~ ${endDateObj.getFullYear()}/${endDateObj.getMonth()+1}/${endDateObj.getDate()}`;
+
+      // 自動產生 6 個時間軸區段標籤
+      let headerHtml = '';
+      for (let i = 0; i < 6; i++) {
+        const tickTime = new Date(minTimestamp + (totalSpanDays * (i / 6) * 24 * 3600 * 1000));
+        headerHtml += `<div>${tickTime.getMonth()+1}/${tickTime.getDate()}</div>`;
+      }
+      timeHeader.innerHTML = headerHtml;
+
+      // 繪製條狀圖
+      ganttContainer.innerHTML = ganttProjects.map(p => {
+        const sTime = new Date(p.gantt_start).getTime();
+        const eTime = new Date(p.gantt_end).getTime();
+
+        let leftPercent = Math.max(0, ((sTime - minTimestamp) / (totalSpanDays * 24 * 3600 * 1000)) * 100);
+        let widthPercent = Math.min(100 - leftPercent, Math.max(8, ((eTime - sTime) / (totalSpanDays * 24 * 3600 * 1000)) * 100));
+
+        const startDisp = p.gantt_start ? p.gantt_start.slice(5) : '';
+        const endDisp = p.gantt_end ? p.gantt_end.slice(5) : '';
+
+        return `
+          <div class="flex items-center text-xs my-1">
+            <div class="w-28 font-bold text-slate-800 truncate pr-2" title="${p.title}">${p.title}</div>
+            <div class="flex-1 bg-slate-200 h-6 rounded relative overflow-hidden">
+              <div class="absolute h-full ${p.ganttColor || 'bg-indigo-500'} text-white text-[10px] flex items-center px-2 font-medium rounded shadow-sm whitespace-nowrap"
+                   style="left: ${leftPercent}%; width: ${widthPercent}%;">
+                ${startDisp} ~ ${endDisp}
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ☑ 全選 / 全不選功能
     function toggleSelectAll(selectAllEl) {
       const isChecked = selectAllEl.checked;
       const visibleCheckboxes = document.querySelectorAll('#project-list .card:not(.hidden) input[type="checkbox"]');
-      visibleCheckboxes.forEach(cb => {
-        cb.checked = isChecked;
-      });
+      visibleCheckboxes.forEach(cb => cb.checked = isChecked);
     }
 
-    // 渲染案件卡片
+    // 渲染案件列表
     function renderProjects(projects, isReadOnly = false) {
+      renderTopReportSection(projects);
+      renderProjectCards(projects, isReadOnly);
+    }
+
+    function renderProjectCards(projects, isReadOnly = false) {
       const listContainer = document.getElementById('project-list');
       if (!projects || projects.length === 0) {
         listContainer.innerHTML = '<div class="bg-white p-8 rounded-xl text-center text-slate-500">目前無您的案件紀錄</div>';
@@ -800,9 +1039,6 @@
           </div>
         `;
       }).join('');
-
-      // 渲染完畢後自動套用當前的篩選條件
-      filterProjects();
     }
 
     // 修改密碼 Modal
@@ -1066,7 +1302,6 @@
 
     function copyLineText() {
       if (isReadOnlyMode) return;
-      // 僅針對案件卡片中的勾選框進行統計，避免選取到頂部全選框
       const selectedIds = Array.from(document.querySelectorAll('#project-list input[type="checkbox"]:checked')).map(cb => parseInt(cb.value));
       
       if (selectedIds.length === 0) {

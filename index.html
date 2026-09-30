@@ -1,0 +1,1106 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>案件管理系統 - DC工具網</title>
+  <!-- 引入 Supabase SDK 與 Tailwind CSS -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <style>
+    /* A4 列印排版控制：列印時自動隱藏按鈕、選單與核取方塊，並顯示列印時間戳記 */
+    @media print {
+      .no-print { display: none !important; }
+      .print-header { display: block !important; }
+      body { background: white; padding: 0; }
+      .card { border: 1px solid #cbd5e1; break-inside: avoid; margin-bottom: 12px; shadow: none; }
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen p-4 sm:p-8 text-slate-800">
+
+  <!-- 🔒 登入遮罩 Modal (未登入時全螢幕顯示) -->
+  <div id="login-overlay" class="fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl p-8">
+      <div class="text-center mb-6">
+        <h2 class="text-2xl font-bold text-slate-900">📂 案件管理系統</h2>
+        <p class="text-sm text-slate-500 mt-1">請輸入承辦人帳號密碼進行登入</p>
+      </div>
+
+      <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">帳號 (如: 001, 002...)</label>
+          <input type="text" id="login-account" required placeholder="請輸入帳號" class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">密碼 (預設: 001001)</label>
+          <input type="password" id="login-password" required placeholder="請輸入密碼" class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition">
+          🚀 登入系統
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- 主系統容器 -->
+  <div id="main-app" class="max-w-4xl mx-auto hidden">
+    <!-- A4 列印專用標題與時間戳記 -->
+    <div class="print-header hidden mb-4 pb-2 border-b-2 border-slate-800">
+      <h2 class="text-xl font-bold text-slate-900">📋 案件管理系統 - 開會報表</h2>
+      <p id="print-timestamp" class="text-sm text-slate-600 mt-1"></p>
+    </div>
+
+    <!-- 頂部登入資訊與操作列 -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 no-print">
+      <div>
+        <div class="flex items-center gap-3">
+          <h1 class="text-2xl font-bold text-slate-900">📋 案件管理系統</h1>
+          <span id="user-badge" class="bg-indigo-100 text-indigo-800 text-xs px-2.5 py-1 rounded-full font-semibold"></span>
+        </div>
+        <p class="text-sm text-slate-500 mt-0.5">勾選案件可快速產生 LINE 進度回報或列印開會報表</p>
+      </div>
+
+      <div class="flex flex-wrap gap-2 items-center">
+        <button id="btn-add-project" onclick="openAddProjectModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg shadow text-sm font-medium transition flex items-center gap-1">
+          ➕ 新增案件
+        </button>
+        <button id="btn-copy-line" onclick="copyLineText()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg shadow text-sm font-medium transition flex items-center gap-1">
+          💬 LINE 回報
+        </button>
+        <button onclick="triggerPrint()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-lg shadow text-sm font-medium transition flex items-center gap-1">
+          🖨️ 列印 A4
+        </button>
+        <button onclick="openChangePwdModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition">
+          🔑 改密碼
+        </button>
+        <button onclick="handleLogout()" class="bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-2 rounded-lg text-sm font-medium transition">
+          🚪 登出
+        </button>
+      </div>
+    </div>
+
+    <!-- 檢視模式與歷史快照選單列 -->
+    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 mb-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 no-print">
+      <div class="flex items-center gap-3 flex-1">
+        <label class="text-sm font-bold text-slate-700 whitespace-nowrap">📅 檢視模式：</label>
+        <select id="snapshot-select" onchange="handleSnapshotChange()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <option value="current">🟢 目前最新狀態 (可編輯)</option>
+          <!-- JS 動態填入歷史快照選項 -->
+        </select>
+      </div>
+      <!-- 🗑️ 刪除/移除快照按鈕 (切換到歷史快照時顯示) -->
+      <button id="btn-delete-snapshot" onclick="deleteSelectedSnapshot()" class="hidden bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium transition whitespace-nowrap flex items-center justify-center gap-1 shadow-sm">
+        🗑️ 移除此快照
+      </button>
+    </div>
+
+    <!-- 快照模式提醒橫幅 -->
+    <div id="snapshot-notice" class="hidden bg-amber-50 border-l-4 border-amber-400 p-4 mb-4 rounded-r-xl text-amber-800 text-sm font-medium">
+      ⚠️ 目前正在檢視【<span id="snapshot-date-text"></span>】歷史備份快照（唯讀模式，無法修改資料）。
+    </div>
+
+    <!-- 🔍 案件篩選工具列 -->
+    <div class="bg-white p-3.5 rounded-xl shadow-sm border border-slate-200 mb-4 flex flex-wrap items-center gap-3.5 no-print">
+      <!-- 全選 Checkbox -->
+      <label class="flex items-center gap-2 font-semibold text-sm text-slate-700 cursor-pointer select-none">
+        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
+        <span>全選</span>
+      </label>
+
+      <div class="h-5 w-px bg-slate-200"></div>
+
+      <!-- 承辦人篩選 (JS 動態讀取有綁定 LINE 的成員) -->
+      <div class="flex items-center gap-2">
+        <label for="filterAssignee" class="text-sm font-bold text-slate-700 whitespace-nowrap">承辦：</label>
+        <select id="filterAssignee" onchange="filterProjects()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <option value="">載入中...</option>
+        </select>
+      </div>
+
+      <!-- 送審單位篩選 -->
+      <div class="flex items-center gap-2">
+        <label for="filterAgency" class="text-sm font-bold text-slate-700 whitespace-nowrap">單位：</label>
+        <select id="filterAgency" onchange="filterProjects()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+          <option value="">全部單位</option>
+          <option value="建築中心">建築中心</option>
+          <option value="基金會">基金會</option>
+        </select>
+      </div>
+
+      <!-- 關鍵字搜尋 -->
+      <div class="flex-1 min-w-[200px]">
+        <input type="text" id="filterKeyword" oninput="filterProjects()" placeholder="🔍 輸入關鍵字搜尋案件名稱、狀態或聯絡人..." class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+      </div>
+    </div>
+
+    <!-- 📱 LINE Bot 承辦人綁定提示卡片 -->
+    <div class="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl mb-6 text-emerald-800 text-sm no-print flex items-start gap-2">
+      <span class="text-base">📱</span>
+      <div>
+        <strong class="font-semibold">承辦人 LINE 週報機器人提醒：</strong>
+        首次加入 LINE 官方帳號時，請直接在對話框輸入<strong>「您的承辦名稱」（例如：<code>周東震</code>）</strong>進行綁定。系統將於每週最後工作日 14:30 自動推播個人週報摘要！
+      </div>
+    </div>
+
+    <!-- 案件列表容器 -->
+    <div id="project-list" class="space-y-4">
+      <div class="text-center py-10 text-slate-400">連線至資料庫載入中...</div>
+    </div>
+  </div>
+
+  <!-- Modal 1: 新增案件彈窗 -->
+  <div id="add-project-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl p-6 relative max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">➕ 新增案件</h3>
+        <button onclick="closeAddProjectModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form id="add-project-form" onsubmit="handleAddProject(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">案件名稱 *</label>
+          <input type="text" id="new-title" required placeholder="例如：中悅19F" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">承辦人 *</label>
+            <select id="new-assignee" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">送審單位 *</label>
+            <select id="new-agency" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+              <option value="" disabled selected>請選擇送審單位</option>
+              <option value="建築中心">建築中心</option>
+              <option value="基金會">基金會</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">目前狀態 *</label>
+            <select id="new-status" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+              <option value="" disabled selected>請選擇狀態</option>
+              <option value="評估">評估</option>
+              <option value="書審報告書製作">書審報告書製作</option>
+              <option value="內檢中">內檢中</option>
+              <option value="已掛件">已掛件</option>
+              <option value="意見回覆">意見回覆</option>
+              <option value="審議會簡報">審議會簡報</option>
+              <option value="最終版">最終版</option>
+              <option value="摘要">摘要</option>
+              <option value="紅/白皮書">紅/白皮書</option>
+              <option value="結案資料">結案資料</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">繳費狀況</label>
+            <select id="new-is-paid" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+              <option value="false">🔴 未繳費</option>
+              <option value="true">🟢 已繳費</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-100">
+          <label class="block text-xs font-semibold text-slate-600 mb-1">聯絡人資訊 (選填)</label>
+          <div class="grid grid-cols-2 gap-3">
+            <input type="text" id="new-contact-name" placeholder="聯絡人姓名" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <input type="text" id="new-contact-phone" placeholder="電話" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-100">
+          <label class="block text-xs font-semibold text-slate-600 mb-1">第一筆大事紀紀錄 (選填)</label>
+          <div class="grid grid-cols-3 gap-2">
+            <input type="date" id="new-log-date" class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <input type="text" id="new-log-event" placeholder="動態描述 (例:已掛件)" class="col-span-2 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3">
+          <button type="button" onclick="closeAddProjectModal()" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">取消</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium">建立案件</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 2: 編輯案件彈窗 -->
+  <div id="edit-project-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl p-6 relative max-h-[90vh] overflow-y-auto">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">✏️ 編輯案件資料</h3>
+        <button onclick="closeEditProjectModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form id="edit-project-form" onsubmit="handleEditProject(event)" class="space-y-4">
+        <input type="hidden" id="edit-project-id">
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">案件名稱 *</label>
+          <input type="text" id="edit-title" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">承辦人 *</label>
+            <select id="edit-assignee" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">送審單位 *</label>
+            <select id="edit-agency" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+              <option value="建築中心">建築中心</option>
+              <option value="基金會">基金會</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">目前狀態 *</label>
+            <select id="edit-status" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+              <option value="評估">評估</option>
+              <option value="書審報告書製作">書審報告書製作</option>
+              <option value="內檢中">內檢中</option>
+              <option value="已掛件">已掛件</option>
+              <option value="意見回覆">意見回覆</option>
+              <option value="審議會簡報">審議會簡報</option>
+              <option value="最終版">最終版</option>
+              <option value="摘要">摘要</option>
+              <option value="紅/白皮書">紅/白皮書</option>
+              <option value="結案資料">結案資料</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-slate-600 mb-1">繳費狀況</label>
+            <select id="edit-is-paid" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
+              <option value="false">🔴 未繳費</option>
+              <option value="true">🟢 已繳費</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="pt-2 border-t border-slate-100">
+          <label class="block text-xs font-semibold text-slate-600 mb-1">聯絡人資訊 (選填)</label>
+          <div class="grid grid-cols-2 gap-3">
+            <input type="text" id="edit-contact-name" placeholder="聯絡人姓名" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+            <input type="text" id="edit-contact-phone" placeholder="電話" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3">
+          <button type="button" onclick="closeEditProjectModal()" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">取消</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium">儲存變更</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 3: 新增大事紀彈窗 -->
+  <div id="add-log-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl p-6 relative">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">📝 新增大事紀進度</h3>
+        <button onclick="closeAddLogModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form id="add-log-form" onsubmit="handleAddLog(event)" class="space-y-4">
+        <input type="hidden" id="log-project-id">
+        
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">選擇日期</label>
+          <input type="date" id="log-date-picker" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">進度 / 動態描述</label>
+          <input type="text" id="log-event" required placeholder="例如：補件完成、取得許可函..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+          
+          <div class="flex flex-wrap gap-1.5 mt-2.5">
+            <button type="button" onclick="setLogEventText('log-event', '已繳費')" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs rounded border border-emerald-200 font-medium">已繳費</button>
+            <button type="button" onclick="setLogEventText('log-event', '已掛件')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">已掛件</button>
+            <button type="button" onclick="setLogEventText('log-event', '內檢中')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">內檢中</button>
+            <button type="button" onclick="setLogEventText('log-event', '意見回覆')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">意見回覆</button>
+            <button type="button" onclick="setLogEventText('log-event', '評估')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">評估</button>
+            <button type="button" onclick="setLogEventText('log-event', '書審報告書製作')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">書審報告書製作</button>
+            <button type="button" onclick="setLogEventText('log-event', '審議會簡報')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">審議會簡報</button>
+            <button type="button" onclick="setLogEventText('log-event', '摘要')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">摘要</button>
+            <button type="button" onclick="setLogEventText('log-event', '最終版')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">最終版</button>
+            <button type="button" onclick="setLogEventText('log-event', '紅/白皮書')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">紅/白皮書</button>
+            <button type="button" onclick="setLogEventText('log-event', '結案資料')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">結案資料</button>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3">
+          <button type="button" onclick="closeAddLogModal()" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">取消</button>
+          <button type="submit" class="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-sm font-medium">更新動態</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 4: 編輯大事紀彈窗 -->
+  <div id="edit-log-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl p-6 relative">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">✏️ 編輯大事紀紀錄</h3>
+        <button onclick="closeEditLogModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form id="edit-log-form" onsubmit="handleEditLog(event)" class="space-y-4">
+        <input type="hidden" id="edit-log-project-id">
+        <input type="hidden" id="edit-log-index">
+        
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">選擇日期</label>
+          <input type="date" id="edit-log-date-picker" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">進度 / 動態描述</label>
+          <input type="text" id="edit-log-event" required placeholder="例如：補件完成、取得許可函..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          
+          <div class="flex flex-wrap gap-1.5 mt-2.5">
+            <button type="button" onclick="setLogEventText('edit-log-event', '已繳費')" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs rounded border border-emerald-200 font-medium">已繳費</button>
+            <button type="button" onclick="setLogEventText('edit-log-event', '已掛件')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">已掛件</button>
+            <button type="button" onclick="setLogEventText('edit-log-event', '內檢中')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">內檢中</button>
+            <button type="button" onclick="setLogEventText('edit-log-event', '意見回覆')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">意見回覆</button>
+            <button type="button" onclick="setLogEventText('edit-log-event', '評估')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">評估</button>
+            <button type="button" onclick="setLogEventText('edit-log-event', '書審報告書製作')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">書審報告書製作</button>
+            <button type="button" onclick="setLogEventText('edit-log-event', '審議會簡報')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">審議會簡報</button>
+            <button type="button" onclick="setLogEventText('edit-log-event', '摘要')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">摘要</button>
+            <button type="button" onclick="setLogEventText('edit-log-event', '最終版')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">最終版</button>
+            <button type="button" onclick="setLogEventText('edit-log-event', '紅/白皮書')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">紅/白皮書</button>
+            <button type="button" onclick="setLogEventText('edit-log-event', '結案資料')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">結案資料</button>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3">
+          <button type="button" onclick="closeEditLogModal()" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">取消</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium">儲存變更</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal 5: 修改密碼彈窗 -->
+  <div id="change-pwd-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl p-6 relative">
+      <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
+        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">🔑 修改個人密碼</h3>
+        <button onclick="closeChangePwdModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
+      </div>
+
+      <form onsubmit="handleChangePwd(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-slate-600 mb-1">新密碼</label>
+          <input type="password" id="new-password" required placeholder="請輸入新密碼" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+        </div>
+
+        <div class="flex justify-end gap-2 pt-3">
+          <button type="button" onclick="closeChangePwdModal()" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">取消</button>
+          <button type="submit" class="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium">確認修改</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    // Supabase 連線設定
+    const SUPABASE_URL = 'https://chcxlpcqjabtgyxtsekg.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_Vk1aTMGX1-KZreO1yQPhdg_37sbeQFL';
+    
+    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    let projectsData = [];
+    let currentUser = null; // 當前登入者資訊
+    let currentSelectedSnapshotId = null; // 當前選取的快照 ID
+    let isReadOnlyMode = false;
+
+    // 初始化檢查 Session
+    document.addEventListener("DOMContentLoaded", () => {
+      const savedUser = localStorage.getItem('app_user_session');
+      if (savedUser) {
+        currentUser = JSON.parse(savedUser);
+        initAppView();
+      }
+    });
+
+    // 處理登入提交
+    async function handleLogin(event) {
+      event.preventDefault();
+      const account = document.getElementById('login-account').value.trim();
+      const pwd = document.getElementById('login-password').value.trim();
+
+      const { data, error } = await supabaseClient
+        .from('users')
+        .select('*')
+        .eq('account', account)
+        .eq('password', pwd)
+        .single();
+
+      if (error || !data) {
+        alert('❌ 帳號或密碼錯誤！');
+        return;
+      }
+
+      currentUser = data;
+      localStorage.setItem('app_user_session', JSON.stringify(data));
+      document.getElementById('login-form').reset();
+      initAppView();
+    }
+
+    // 登出
+    function handleLogout() {
+      localStorage.removeItem('app_user_session');
+      currentUser = null;
+      document.getElementById('login-overlay').classList.remove('hidden');
+      document.getElementById('main-app').classList.add('hidden');
+    }
+
+    // 初始化已登入介面
+    function initAppView() {
+      document.getElementById('login-overlay').classList.add('hidden');
+      document.getElementById('main-app').classList.remove('hidden');
+
+      const badge = document.getElementById('user-badge');
+      badge.innerText = `👤 ${currentUser.name} (${currentUser.role === 'admin' ? '管理者' : '承辦人'})`;
+
+      fetchProjects();
+    }
+
+    // 🛠️ 動態設定承辦人選單：僅抓取 users_line 中成功綁定 LINE 的成員，完全移除預設測試名稱
+    async function setupAssigneeDropdowns() {
+      const filterAssignee = document.getElementById('filterAssignee');
+      const newAssignee = document.getElementById('new-assignee');
+      const editAssignee = document.getElementById('edit-assignee');
+
+      if (currentUser.role !== 'admin') {
+        // 一般成員：選單只能看到自己且固定選取自己
+        const userOption = `<option value="${currentUser.name}">${currentUser.name}</option>`;
+        
+        if (filterAssignee) {
+          filterAssignee.innerHTML = userOption;
+          filterAssignee.value = currentUser.name;
+          filterAssignee.disabled = true;
+        }
+        if (newAssignee) {
+          newAssignee.innerHTML = userOption;
+          newAssignee.value = currentUser.name;
+          newAssignee.disabled = true;
+        }
+        if (editAssignee) {
+          editAssignee.innerHTML = userOption;
+          editAssignee.value = currentUser.name;
+          editAssignee.disabled = true;
+        }
+      } else {
+        // 001 管理員：僅抓取 users_line (已綁定 LINE 帳號) 的承辦人姓名
+        let assigneeSet = new Set();
+
+        // 確保管理者自身在選單內
+        if (currentUser.name) assigneeSet.add(currentUser.name);
+
+        // 查詢 users_line 表
+        try {
+          const { data: lineData, error } = await supabaseClient.from('users_line').select('handler_name');
+          if (!error && lineData) {
+            lineData.forEach(item => {
+              if (item.handler_name && item.handler_name.trim() !== '') {
+                assigneeSet.add(item.handler_name.trim());
+              }
+            });
+          }
+        } catch (e) {
+          console.error("抓取 users_line 失敗:", e);
+        }
+
+        const assigneeList = Array.from(assigneeSet);
+
+        // 填入頂部篩選選單
+        if (filterAssignee) {
+          filterAssignee.disabled = false;
+          let filterHtml = '<option value="">全部承辦人</option>';
+          assigneeList.forEach(name => {
+            filterHtml += `<option value="${name}">${name}</option>`;
+          });
+          filterAssignee.innerHTML = filterHtml;
+        }
+
+        // 填入新增/編輯 Modal 彈窗選單
+        const modalHtml = assigneeList.map(name => `<option value="${name}">${name}</option>`).join('');
+        if (newAssignee) {
+          newAssignee.disabled = false;
+          newAssignee.innerHTML = modalHtml;
+        }
+        if (editAssignee) {
+          editAssignee.disabled = false;
+          editAssignee.innerHTML = modalHtml;
+        }
+      }
+    }
+
+    // 從 Supabase 抓取案件資料
+    async function fetchProjects() {
+      const { data, error } = await supabaseClient
+        .from('projects')
+        .select('*')
+        .order('id', { ascending: true });
+
+      if (error) {
+        document.getElementById('project-list').innerHTML = `
+          <div class="bg-red-50 text-red-600 p-4 rounded-xl border border-red-200">
+            ❌ 載入失敗：${error.message}
+          </div>`;
+        return;
+      }
+
+      projectsData = currentUser.role === 'admin' 
+        ? data 
+        : data.filter(p => p.assignee === currentUser.name);
+
+      renderProjects(projectsData, false);
+      fetchSnapshotsList();
+      await setupAssigneeDropdowns(); // 載入案件後，重新讀取 users_line 並填入承辦人選單
+    }
+
+    // 讀取歷史快照選單
+    async function fetchSnapshotsList() {
+      const { data, error } = await supabaseClient
+        .from('weekly_snapshots')
+        .select('id, created_at, snapshot_data')
+        .order('created_at', { ascending: false });
+
+      if (error || !data) return;
+
+      const select = document.getElementById('snapshot-select');
+      select.innerHTML = '<option value="current">🟢 目前最新狀態 (可編輯)</option>';
+
+      // 個人隱藏清單
+      const hiddenList = currentUser.role !== 'admin'
+        ? JSON.parse(localStorage.getItem('hidden_snapshots_' + currentUser.account) || '[]')
+        : [];
+
+      data.forEach(s => {
+        if (currentUser.role !== 'admin' && hiddenList.includes(s.id)) {
+          return;
+        }
+
+        const dateObj = new Date(s.created_at);
+        const yyyy = dateObj.getFullYear();
+        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+        const dd = String(dateObj.getDate()).padStart(2, '0');
+        const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+        const weekDay = weekDays[dateObj.getDay()];
+        const timeStr = dateObj.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
+
+        let countText = '';
+        if (currentUser.role !== 'admin' && Array.isArray(s.snapshot_data)) {
+          const myCount = s.snapshot_data.filter(p => p.assignee === currentUser.name).length;
+          countText = ` (${myCount} 筆您的案件)`;
+        }
+
+        const opt = document.createElement('option');
+        opt.value = JSON.stringify({ id: s.id, snapshot_data: s.snapshot_data });
+        opt.textContent = `📅 ${yyyy}-${mm}-${dd} (${weekDay}) ${timeStr} 歷史快照${countText}`;
+        select.appendChild(opt);
+      });
+    }
+
+    // 切換快照模式處理
+    function handleSnapshotChange() {
+      const select = document.getElementById('snapshot-select');
+      const notice = document.getElementById('snapshot-notice');
+      const btnAdd = document.getElementById('btn-add-project');
+      const btnCopy = document.getElementById('btn-copy-line');
+      const btnDeleteSnap = document.getElementById('btn-delete-snapshot');
+      const dateText = document.getElementById('snapshot-date-text');
+
+      if (select.value === 'current') {
+        isReadOnlyMode = false;
+        currentSelectedSnapshotId = null;
+        notice.classList.add('hidden');
+        btnDeleteSnap.classList.add('hidden');
+        btnAdd.classList.remove('hidden');
+        btnCopy.classList.remove('hidden');
+        renderProjects(projectsData, false);
+      } else {
+        isReadOnlyMode = true;
+        const selectedObj = JSON.parse(select.value);
+        currentSelectedSnapshotId = selectedObj.id;
+        let snapshotData = selectedObj.snapshot_data || [];
+
+        // 歷史快照權限過濾：一般承辦人僅能看到自己的案件
+        if (currentUser.role !== 'admin') {
+          snapshotData = snapshotData.filter(p => p.assignee === currentUser.name);
+        }
+
+        notice.classList.remove('hidden');
+        btnDeleteSnap.classList.remove('hidden');
+        btnAdd.classList.add('hidden');
+        btnCopy.classList.add('hidden');
+        dateText.innerText = select.options[select.selectedIndex].text;
+        renderProjects(snapshotData, true);
+      }
+    }
+
+    // 刪除 / 隱藏歷史快照
+    async function deleteSelectedSnapshot() {
+      if (!currentSelectedSnapshotId) return;
+
+      if (currentUser.role === 'admin') {
+        // 管理者權限：直接從 Supabase 資料庫徹底刪除
+        if (confirm('【管理者權限】確定要從資料庫徹底刪除這筆歷史快照嗎？\n(此動作無法復原)')) {
+          const { error } = await supabaseClient
+            .from('weekly_snapshots')
+            .delete()
+            .eq('id', currentSelectedSnapshotId);
+
+          if (error) {
+            alert('刪除失敗：' + error.message);
+          } else {
+            alert('✅ 已從資料庫成功刪除該歷史快照！');
+            resetToCurrentMode();
+          }
+        }
+      } else {
+        // 一般承辦人：僅對自己隱藏（管理者仍看得見）
+        if (confirm('確定要移除這筆歷史快照嗎？\n(移除後您的選單將不再顯示，但 001 管理者仍會保留完整備份)')) {
+          let hiddenList = JSON.parse(localStorage.getItem('hidden_snapshots_' + currentUser.account) || '[]');
+          if (!hiddenList.includes(currentSelectedSnapshotId)) {
+            hiddenList.push(currentSelectedSnapshotId);
+            localStorage.setItem('hidden_snapshots_' + currentUser.account, JSON.stringify(hiddenList));
+          }
+          alert('✅ 已為您移除此歷史快照！');
+          resetToCurrentMode();
+        }
+      }
+    }
+
+    function resetToCurrentMode() {
+      document.getElementById('snapshot-select').value = 'current';
+      handleSnapshotChange();
+      fetchSnapshotsList();
+    }
+
+    // 🔍 複合篩選與搜尋邏輯
+    function filterProjects() {
+      const assignee = document.getElementById('filterAssignee')?.value.toLowerCase().trim() || '';
+      const agency = document.getElementById('filterAgency')?.value.toLowerCase().trim() || '';
+      const keyword = document.getElementById('filterKeyword')?.value.toLowerCase().trim() || '';
+
+      const cards = document.querySelectorAll('#project-list .card');
+
+      cards.forEach(card => {
+        const text = card.innerText.toLowerCase();
+
+        const matchAssignee = !assignee || text.includes(assignee);
+        const matchAgency = !agency || text.includes(agency);
+        const matchKeyword = !keyword || text.includes(keyword);
+
+        if (matchAssignee && matchAgency && matchKeyword) {
+          card.classList.remove('hidden');
+        } else {
+          card.classList.add('hidden');
+        }
+      });
+
+      // 重新篩選時重置全選勾選框狀態
+      const selectAll = document.getElementById('selectAllCheckbox');
+      if (selectAll) selectAll.checked = false;
+    }
+
+    // ☑ 全選 / 全不選功能（僅作用於當前顯示中的卡片）
+    function toggleSelectAll(selectAllEl) {
+      const isChecked = selectAllEl.checked;
+      const visibleCheckboxes = document.querySelectorAll('#project-list .card:not(.hidden) input[type="checkbox"]');
+      visibleCheckboxes.forEach(cb => {
+        cb.checked = isChecked;
+      });
+    }
+
+    // 渲染案件卡片
+    function renderProjects(projects, isReadOnly = false) {
+      const listContainer = document.getElementById('project-list');
+      if (!projects || projects.length === 0) {
+        listContainer.innerHTML = '<div class="bg-white p-8 rounded-xl text-center text-slate-500">目前無您的案件紀錄</div>';
+        return;
+      }
+
+      listContainer.innerHTML = projects.map(p => {
+        const logs = Array.isArray(p.logs) ? p.logs : [];
+        const contacts = Array.isArray(p.contacts) ? p.contacts : [];
+
+        return `
+          <div class="card bg-white p-5 rounded-xl shadow-sm border border-slate-200 transition">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-3">
+                ${!isReadOnly ? `<input type="checkbox" id="check-${p.id}" value="${p.id}" class="no-print w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">` : ''}
+                <label for="check-${p.id}" class="font-bold text-lg text-slate-900 ${!isReadOnly ? 'cursor-pointer hover:text-indigo-600' : ''}">${p.title || '未命名案件'}</label>
+              </div>
+              <div class="flex items-center gap-2">
+                ${!isReadOnly ? `
+                  <button onclick="openEditProjectModal(${p.id})" class="no-print text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md font-medium border border-blue-200 transition">
+                    ✏️ 編輯
+                  </button>
+                  <button onclick="togglePaidStatus(${p.id},${!p.is_paid})" class="no-print text-xs transition cursor-pointer">
+                    ${p.is_paid 
+                      ? '<span class="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-3 py-1 rounded-full font-semibold">🟢 已繳費</span>' 
+                      : '<span class="bg-rose-100 text-rose-800 hover:bg-rose-200 px-3 py-1 rounded-full font-semibold">🔴 未繳費</span>'}
+                  </button>
+                ` : `
+                  <span class="text-xs ${p.is_paid ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'} px-3 py-1 rounded-full font-semibold">
+                    ${p.is_paid ? '🟢 已繳費' : '🔴 未繳費'}
+                  </span>
+                  <span class="no-print text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-md font-medium">🔒 唯讀快照</span>
+                `}
+              </div>
+            </div>
+
+            <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
+              <div><span class="text-slate-400">承辦人：</span><span class="font-medium text-slate-800">${p.assignee || '未指定'}</span></div>
+              <div><span class="text-slate-400">送審單位：</span><span class="font-medium text-slate-800">${p.agency || '未填'}</span></div>
+              <div><span class="text-slate-400">目前狀態：</span><span class="font-medium text-slate-800">${p.status || '評估'}</span></div>
+              <div><span class="text-slate-400">聯絡人：</span><span class="font-medium text-slate-800">${contacts.map(c => `${c.name}(${c.phone})`).join(', ') || '無'}</span></div>
+            </div>
+
+            <!-- 大事紀時間軸 -->
+            <div class="mt-4">
+              <div class="flex items-center justify-between mb-2">
+                <div class="text-xs font-semibold text-slate-400">大事紀歷程：</div>
+                ${!isReadOnly ? `
+                  <button onclick="openAddLogModal(${p.id})" class="no-print text-xs text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-1">
+                    ➕ 新增歷程
+                  </button>
+                ` : ''}
+              </div>
+              <ul class="text-sm space-y-1 text-slate-700 pl-3 border-l-2 border-indigo-200">
+                ${logs.length > 0 ? logs.map((l, index) => `
+                  <li class="flex items-center justify-between py-0.5">
+                    <div>
+                      <span class="font-semibold text-slate-900">${l.date}</span>${l.event}
+                    </div>
+                    ${!isReadOnly ? `
+                      <div class="no-print flex items-center gap-2 text-xs">
+                        <button onclick="openEditLogModal(${p.id}, ${index})" class="text-blue-600 hover:text-blue-800 font-medium">編輯</button>
+                        <button onclick="deleteLog(${p.id}, ${index})" class="text-rose-500 hover:text-rose-700 font-medium">刪除</button>
+                      </div>
+                    ` : ''}
+                  </li>
+                `).join('') : '<li class="text-xs text-slate-400 italic">無紀錄</li>'}
+              </ul>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // 渲染完畢後自動套用當前的篩選條件
+      filterProjects();
+    }
+
+    // 修改密碼 Modal
+    function openChangePwdModal() {
+      document.getElementById('new-password').value = '';
+      document.getElementById('change-pwd-modal').classList.remove('hidden');
+    }
+    function closeChangePwdModal() { document.getElementById('change-pwd-modal').classList.add('hidden'); }
+    async function handleChangePwd(event) {
+      event.preventDefault();
+      const newPwd = document.getElementById('new-password').value.trim();
+
+      const { error } = await supabaseClient
+        .from('users')
+        .update({ password: newPwd })
+        .eq('account', currentUser.account);
+
+      if (error) {
+        alert('修改密碼失敗：' + error.message);
+      } else {
+        currentUser.password = newPwd;
+        localStorage.setItem('app_user_session', JSON.stringify(currentUser));
+        alert('✅ 密碼修改成功！');
+        closeChangePwdModal();
+      }
+    }
+
+    // 切換繳費狀態
+    async function togglePaidStatus(id, newStatus) {
+      if (isReadOnlyMode) return;
+      const { error } = await supabaseClient
+        .from('projects')
+        .update({ is_paid: newStatus })
+        .eq('id', id);
+
+      if (error) {
+        alert('更新失敗：' + error.message);
+      } else {
+        fetchProjects();
+      }
+    }
+
+    // 日期工具
+    function setLogEventText(inputId, text) { document.getElementById(inputId).value = text; }
+    function formatDateToCustom(dateString) {
+      if (!dateString) return '';
+      const dateObj = new Date(dateString);
+      const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+      return `${dateObj.getMonth() + 1}/${dateObj.getDate()}(${weekDays[dateObj.getDay()]})`;
+    }
+    function parseCustomDateToISO(customDateStr) {
+      if (!customDateStr) return getTodayISO();
+      const match = customDateStr.match(/(\d+)\/(\d+)/);
+      if (match) {
+        const month = String(match[1]).padStart(2, '0');
+        const day = String(match[2]).padStart(2, '0');
+        return `${new Date().getFullYear()}-${month}-${day}`;
+      }
+      return getTodayISO();
+    }
+    function getTodayISO() {
+      const today = new Date();
+      return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    }
+    function triggerPrint() {
+      const now = new Date();
+      const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
+      document.getElementById('print-timestamp').innerText = `報表產出時間：${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} (${weekDays[now.getDay()]}) ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      window.print();
+    }
+
+    // 表單 modal
+    function openAddProjectModal() {
+      if (isReadOnlyMode) return;
+      document.getElementById('add-project-form').reset();
+      setupAssigneeDropdowns();
+      document.getElementById('new-log-date').value = getTodayISO();
+      document.getElementById('add-project-modal').classList.remove('hidden');
+    }
+    function closeAddProjectModal() { document.getElementById('add-project-modal').classList.add('hidden'); }
+
+    async function handleAddProject(event) {
+      event.preventDefault();
+      const title = document.getElementById('new-title').value.trim();
+      const assignee = document.getElementById('new-assignee').value;
+      const agency = document.getElementById('new-agency').value;
+      const status = document.getElementById('new-status').value;
+      const is_paid = document.getElementById('new-is-paid').value === 'true';
+
+      const contactName = document.getElementById('new-contact-name').value.trim();
+      const contactPhone = document.getElementById('new-contact-phone').value.trim();
+      const contacts = (contactName || contactPhone) ? [{ name: contactName, phone: contactPhone, role: '聯絡人' }] : [];
+
+      const logDateRaw = document.getElementById('new-log-date').value;
+      const logEvent = document.getElementById('new-log-event').value.trim();
+      const logs = logEvent ? [{ date: formatDateToCustom(logDateRaw), event: logEvent }] : [];
+
+      const { error } = await supabaseClient
+        .from('projects')
+        .insert([{ title, assignee, agency, status, is_paid, contacts, logs }]);
+
+      if (error) {
+        alert('新增案件失敗：' + error.message);
+      } else {
+        closeAddProjectModal();
+        fetchProjects();
+      }
+    }
+
+    function openEditProjectModal(id) {
+      if (isReadOnlyMode) return;
+      const p = projectsData.find(item => item.id === id);
+      if (!p) return;
+
+      document.getElementById('edit-project-id').value = p.id;
+      document.getElementById('edit-title').value = p.title || '';
+      
+      const editAssignee = document.getElementById('edit-assignee');
+      if (currentUser.role === 'admin') {
+        editAssignee.disabled = false;
+        editAssignee.value = p.assignee || currentUser.name;
+      } else {
+        editAssignee.value = currentUser.name;
+        editAssignee.disabled = true;
+      }
+
+      document.getElementById('edit-agency').value = p.agency || '建築中心';
+      document.getElementById('edit-status').value = p.status || '評估';
+      document.getElementById('edit-is-paid').value = p.is_paid ? 'true' : 'false';
+
+      const contacts = Array.isArray(p.contacts) && p.contacts.length > 0 ? p.contacts[0] : { name: '', phone: '' };
+      document.getElementById('edit-contact-name').value = contacts.name || '';
+      document.getElementById('edit-contact-phone').value = contacts.phone || '';
+
+      document.getElementById('edit-project-modal').classList.remove('hidden');
+    }
+    function closeEditProjectModal() { document.getElementById('edit-project-modal').classList.add('hidden'); }
+
+    async function handleEditProject(event) {
+      event.preventDefault();
+      const id = parseInt(document.getElementById('edit-project-id').value);
+      const title = document.getElementById('edit-title').value.trim();
+      const assignee = document.getElementById('edit-assignee').value;
+      const agency = document.getElementById('edit-agency').value;
+      const status = document.getElementById('edit-status').value;
+      const is_paid = document.getElementById('edit-is-paid').value === 'true';
+
+      const contactName = document.getElementById('edit-contact-name').value.trim();
+      const contactPhone = document.getElementById('edit-contact-phone').value.trim();
+      const contacts = (contactName || contactPhone) ? [{ name: contactName, phone: contactPhone, role: '聯絡人' }] : [];
+
+      const { error } = await supabaseClient
+        .from('projects')
+        .update({ title, assignee, agency, status, is_paid, contacts })
+        .eq('id', id);
+
+      if (error) {
+        alert('修改案件失敗：' + error.message);
+      } else {
+        closeEditProjectModal();
+        fetchProjects();
+      }
+    }
+
+    function openAddLogModal(projectId) {
+      if (isReadOnlyMode) return;
+      document.getElementById('add-log-form').reset();
+      document.getElementById('log-project-id').value = projectId;
+      document.getElementById('log-date-picker').value = getTodayISO();
+      document.getElementById('add-log-modal').classList.remove('hidden');
+    }
+    function closeAddLogModal() { document.getElementById('add-log-modal').classList.add('hidden'); }
+
+    async function handleAddLog(event) {
+      event.preventDefault();
+      const projectId = parseInt(document.getElementById('log-project-id').value);
+      const dateRaw = document.getElementById('log-date-picker').value;
+      const eventText = document.getElementById('log-event').value.trim();
+
+      const formattedDate = formatDateToCustom(dateRaw);
+      const project = projectsData.find(p => p.id === projectId);
+      if (!project) return;
+
+      const updatedLogs = [...(Array.isArray(project.logs) ? project.logs : []), { date: formattedDate, event: eventText }];
+
+      const { error } = await supabaseClient
+        .from('projects')
+        .update({ logs: updatedLogs })
+        .eq('id', projectId);
+
+      if (error) {
+        alert('新增動態失敗：' + error.message);
+      } else {
+        closeAddLogModal();
+        fetchProjects();
+      }
+    }
+
+    function openEditLogModal(projectId, logIndex) {
+      if (isReadOnlyMode) return;
+      const project = projectsData.find(p => p.id === projectId);
+      if (!project || !Array.isArray(project.logs) || !project.logs[logIndex]) return;
+
+      const logItem = project.logs[logIndex];
+      document.getElementById('edit-log-project-id').value = projectId;
+      document.getElementById('edit-log-index').value = logIndex;
+      document.getElementById('edit-log-date-picker').value = parseCustomDateToISO(logItem.date);
+      document.getElementById('edit-log-event').value = logItem.event || '';
+
+      document.getElementById('edit-log-modal').classList.remove('hidden');
+    }
+    function closeEditLogModal() { document.getElementById('edit-log-modal').classList.add('hidden'); }
+
+    async function handleEditLog(event) {
+      event.preventDefault();
+      const projectId = parseInt(document.getElementById('edit-log-project-id').value);
+      const logIndex = parseInt(document.getElementById('edit-log-index').value);
+      const dateRaw = document.getElementById('edit-log-date-picker').value;
+      const eventText = document.getElementById('edit-log-event').value.trim();
+
+      const formattedDate = formatDateToCustom(dateRaw);
+      const project = projectsData.find(p => p.id === projectId);
+      if (!project) return;
+
+      const updatedLogs = [...(Array.isArray(project.logs) ? project.logs : [])];
+      updatedLogs[logIndex] = { date: formattedDate, event: eventText };
+
+      const { error } = await supabaseClient
+        .from('projects')
+        .update({ logs: updatedLogs })
+        .eq('id', projectId);
+
+      if (error) {
+        alert('修改動態失敗：' + error.message);
+      } else {
+        closeEditLogModal();
+        fetchProjects();
+      }
+    }
+
+    async function deleteLog(projectId, logIndex) {
+      if (isReadOnlyMode) return;
+      if (!confirm('確定要刪除這筆大事紀紀錄嗎？')) return;
+
+      const project = projectsData.find(p => p.id === projectId);
+      if (!project) return;
+
+      const updatedLogs = (Array.isArray(project.logs) ? project.logs : []).filter((_, idx) => idx !== logIndex);
+
+      const { error } = await supabaseClient
+        .from('projects')
+        .update({ logs: updatedLogs })
+        .eq('id', projectId);
+
+      if (error) {
+        alert('刪除動態失敗：' + error.message);
+      } else {
+        fetchProjects();
+      }
+    }
+
+    function copyLineText() {
+      if (isReadOnlyMode) return;
+      // 僅針對案件卡片中的勾選框進行統計，避免選取到頂部全選框
+      const selectedIds = Array.from(document.querySelectorAll('#project-list input[type="checkbox"]:checked')).map(cb => parseInt(cb.value));
+      
+      if (selectedIds.length === 0) {
+        alert('請先勾選要回報的案件！');
+        return;
+      }
+
+      const selectedProjects = projectsData.filter(p => selectedIds.includes(p.id));
+      let textLines = [];
+
+      selectedProjects.forEach(p => {
+        const logs = Array.isArray(p.logs) ? p.logs : [];
+        const payStatusStr = p.is_paid ? '已繳費' : '未繳費';
+        
+        if (logs.length === 1) {
+          let eventText = logs[0].event;
+          if (!eventText.includes('繳費')) {
+            eventText += `(${payStatusStr})`;
+          }
+          textLines.push(`${p.title}-${logs[0].date}${eventText}`);
+        } else if (logs.length > 1) {
+          let block = `${p.title}-\n` + logs.map(l => `${l.date}${l.event}`).join('\n');
+          textLines.push(block);
+        } else {
+          textLines.push(`${p.title}-目前無動態`);
+        }
+      });
+
+      const finalText = textLines.join('\n\n') + '\n\n以上';
+
+      navigator.clipboard.writeText(finalText).then(() => {
+        alert('✅ 已複製 LINE 回報文字！可以直接貼到通訊軟體。');
+      });
+    }
+  </script>
+</body>
+</html>

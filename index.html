@@ -1323,7 +1323,7 @@
           }
           textLines.push(`${p.title}-${logs[0].date}${eventText}`);
         } else if (logs.length > 1) {
-          let block = `${p.title}-\n` + logs.map(l => `${l.date}${l.event}`).join('\n');
+          let block = `${p.title}-\n` + `${logs[logs.length - 1].date}${logs[logs.length - 1].event}`;
           textLines.push(block);
         } else {
           textLines.push(`${p.title}-目前無動態`);

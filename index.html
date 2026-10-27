@@ -1,1341 +1,293 @@
 <!DOCTYPE html>
-<html lang="zh-TW">
+<html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DC線上作業系統 - 案件管理系統</title>
-  <!-- 引入 Supabase SDK 與 Tailwind CSS -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://cdn.tailwindcss.com"></script>
-  
-  <style>
-    /* A4 列印排版控制：列印時只顯示甘特圖與對照表，隱藏個案卡片與控制項 */
-    @media print {
-      .no-print { display: none !important; }
-      #project-cards-section { display: none !important; } /* 隱藏卡片區塊，防止列印壓縮 */
-      #report-top-section { 
-        display: block !important; 
-        margin: 0 !important; 
-        padding: 0 !important; 
-        border: none !important; 
-        box-shadow: none !important; 
-      }
-      .print-header { display: block !important; }
-      body { background: white !important; padding: 0 !important; }
-      .print-section { break-inside: avoid; }
-    }
-  </style>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DC 工作助理 1.0｜第一批互動試用版</title>
+<style>
+/* DC 線上作業系統 · 與 progress.html 統一的視覺設計 */
+:root {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  font-synthesis: none;
+  color: #1e293b;
+  background: #f8fafc;
+  --dc-header: #06231b;
+  --dc-emerald: #059669;
+  --dc-emerald-hover: #047857;
+  --dc-mint: #34d399;
+  --dc-text: #1e293b;
+  --dc-muted: #64748b;
+  --dc-border: #e2e8f0;
+  --dc-bg: #f8fafc;
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--dc-bg); color: var(--dc-text); }
+button,input,select,textarea { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .45; }
+a,button,input,select,textarea,summary { -webkit-tap-highlight-color: transparent; }
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,summary:focus-visible {
+  outline: 2px solid var(--dc-emerald); outline-offset: 3px;
+}
+.wrap { max-width: 1120px; margin: 0 auto; padding: 22px 24px; }
+/* 參照 progress.html 深綠色導覽、薄荷綠標誌與站台字樣 */
+.top {
+  background: var(--dc-header);
+  border-bottom: 1px solid rgba(16,185,129,.25);
+  color: #ecfdf5;
+  box-shadow: 0 4px 12px rgba(0,0,0,.10);
+}
+.top .wrap { padding-top: 16px; padding-bottom: 16px; }
+.brand-row { display: flex; align-items: center; gap: 13px; min-width: 0; }
+.logo-box {
+  width: 42px; height: 42px; flex: 0 0 42px;
+  display: grid; place-items: center;
+  border-radius: 10px; background: rgba(16,185,129,.20);
+  border: 1px solid rgba(52,211,153,.50);
+  color: var(--dc-mint); font-size: 16px; font-weight: 800; letter-spacing: .3px;
+}
+.site-name { color: #ecfdf5; font-weight: 750; font-size: 16px; line-height: 1.25; }
+.site-subtitle { color: var(--dc-mint); font-size: 11px; margin-top: 3px; }
+.top h1 { margin: 0; font-size: 21px; font-weight: 750; line-height: 1.3; }
+.top .muted { color: #a7f3d0; }
+.header-separator { height: 35px; width: 1px; background: rgba(167,243,208,.27); margin: 0 6px; }
+.header-label { min-width: 0; }
+.badge-proto {
+  font-size: 12px; color: var(--dc-mint); background: rgba(16,185,129,.11);
+  border: 1px solid rgba(52,211,153,.4); border-radius: 7px;
+  padding: 7px 11px; white-space: nowrap; font-weight: 600;
+}
+.muted { color: var(--dc-muted); }
+.warn {
+  background: #fffbeb; color: #854d0e; border: 1px solid #fde68a;
+  border-left: 4px solid #eab308;
+  border-radius: 10px; padding: 13px 16px; margin-top: 17px;
+  font-size: 13px; line-height: 1.7;
+}
+.row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.split { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
+.card {
+  background: #fff; border: 1px solid var(--dc-border); border-radius: 14px;
+  padding: 22px; margin-top: 18px;
+  box-shadow: 0 2px 4px rgba(0,0,0,.025);
+  transition: border-color .2s ease,box-shadow .2s ease;
+}
+.card:hover { border-color: #a7f3d0; box-shadow: 0 8px 20px rgba(5,150,105,.055); }
+.card > .split h2 { color: #0f172a; letter-spacing: -.3px; }
+.stats { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 14px; margin-top: 20px; }
+.stat {
+  padding: 19px 18px; border-radius: 14px; background: #fff;
+  border: 1px solid var(--dc-border); box-shadow: 0 2px 4px rgba(0,0,0,.02);
+  transition: border-color .2s, transform .2s, box-shadow .2s;
+}
+.stat:hover { border-color: #6ee7b7; transform: translateY(-2px); box-shadow: 0 8px 20px rgba(5,150,105,.08); }
+.stat::before { content: ""; display: block; width: 28px; height: 3px; background: #10b981; border-radius: 3px; margin-bottom: 13px; }
+.stat:nth-child(2)::before { background: #f59e0b; }
+.stat:nth-child(3)::before { background: #ef4444; }
+.stat:nth-child(4)::before { background: #059669; }
+.stat strong { display: block; font-size: 27px; font-weight: 780; line-height: 1.2; color: #064e3b; }
+.stat:nth-child(3) strong { color: #b91c1c; }
+.stat small { color: var(--dc-muted); font-size: 12px; line-height: 1.8; }
+.btn {
+  padding: 10px 14px; border-radius: 8px; background: #fff;
+  color: #334155; border: 1px solid #cbd5e1; font-weight: 600;
+  font-size: 14px; line-height: 1.35;
+  display: inline-flex; gap: 6px; align-items: center; justify-content: center;
+  transition: background-color .2s, border-color .2s, color .2s,transform .12s;
+}
+.btn:hover:not(:disabled) { background: #f0fdf4; border-color: #6ee7b7; color: #065f46; }
+.btn:active:not(:disabled) { transform: scale(.985); }
+.primary,.green { background: var(--dc-emerald); border-color: var(--dc-emerald); color: #fff; }
+.primary:hover:not(:disabled),.green:hover:not(:disabled) { background: var(--dc-emerald-hover); border-color: var(--dc-emerald-hover); color: #fff; }
+.danger { background: #fff1f2; color: #be123c; border-color: #fecdd3; }
+.danger:hover:not(:disabled) { color: #9f1239; background: #ffe4e6; border-color: #fda4af; }
+.tab.active { background: #ecfdf5; border-color: #6ee7b7; color: #065f46; }
+.tab.active:hover { background: #d1fae5; }
+.tag { font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 30px; background: #e2e8f0; color: #334155; white-space: nowrap; }
+.tag.urgent { background: #fee2e2; color: #b91c1c; }
+.tag.important { background: #fef3c7; color: #92400e; }
+.tag.normal { background: #f1f5f9; color: #475569; }
+.tag.done { background: #d1fae5; color: #065f46; }
+.task {
+  background: #fff; border: 1px solid var(--dc-border); border-radius: 12px;
+  padding: 16px; margin: 11px 0;
+  transition: border-color .2s, box-shadow .2s;
+}
+.task:hover { border-color: #6ee7b7; box-shadow: 0 5px 14px rgba(5,150,105,.06); }
+.task h3 { margin: 0 0 7px; font-size: 16px; color: #0f172a; }
+.task p { margin: 6px 0; font-size: 13px; line-height: 1.6; }
+.task-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 13px; }
+.mini { font-size: 12px; padding: 7px 10px; }
+.grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.field { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 600; color: #334155; }
+.field input,.field select,.field textarea {
+  padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 8px;
+  background: #fff; color: #0f172a; min-width: 0; width: 100%;
+  transition: border-color .2s, box-shadow .2s;
+}
+.field input:focus,.field select:focus,.field textarea:focus {
+  outline: none; border-color: #059669; box-shadow: 0 0 0 3px rgba(16,185,129,.12);
+}
+.field small { font-weight: 400; color: var(--dc-muted); }
+label { cursor: pointer; }
+details > summary { font-weight: 700; cursor: pointer; padding: 13px; background: #ecfdf5; color: #065f46; border: 1px solid #d1fae5; border-radius: 9px; }
+details .grid { margin-top: 14px; }
+.toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin: 15px 0; }
+.empty { padding: 35px; text-align: center; color: var(--dc-muted); }
+.overlay { position: fixed; inset: 0; background: rgba(6,35,27,.69); display: none; align-items: center; justify-content: center; padding: 15px; z-index: 100; }
+.overlay.open { display: flex; }
+.dialog {
+  background: #fff; border: 1px solid #d1fae5;
+  box-shadow: 0 24px 65px rgba(0,0,0,.24); border-radius: 14px;
+  padding: 24px; width: min(640px,100%); max-height: 94vh; overflow: auto;
+}
+.dialog h2 { margin: 0 0 12px; font-size: 20px; color: #0f172a; }
+.hidden { display: none !important; }
+.gantt-scroll { overflow: auto; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
+.gantt-table { border-collapse: separate; border-spacing: 3px; min-width: 740px; width: 100%; }
+.gantt-table td,.gantt-table th { font-size: 12px; padding: 10px 4px; text-align: center; background: #f1f5f9; border-radius: 5px; min-width: 70px; }
+.gantt-table th { background: #ecfdf5; color: #065f46; font-weight: 700; }
+.gantt-table td:first-child,.gantt-table th:first-child { min-width: 190px; text-align: left; padding-left: 10px; background: #fff; }
+.gantt-table .scheduled { background: #a7f3d0; color: #064e3b; }
+.gantt-table .completed { background: #059669; color: #fff; }
+.gantt-table .due { box-shadow: inset 0 0 0 2px #ef4444; }
+.gantt-table .off { background: #e2e8f0; color: #64748b; }
+.gantt-table .scheduled.off { background: #d1fae5; color: #065f46; }
+.msg {
+  background: #f0fdf4; border: 1px solid #a7f3d0; border-left: 4px solid #059669;
+  border-radius: 12px; padding: 20px; max-width: 550px;
+  white-space: pre-wrap; line-height: 1.75; color: #1e293b;
+}
+.history { border-left: 2px solid #6ee7b7; padding: 4px 0 4px 15px; margin: 12px 0; }
+.history > div { margin-bottom: 10px; border-bottom: 1px dashed #e2e8f0; padding-bottom: 8px; }
+.history small { color: var(--dc-muted); }
+.note { font-size: 12px; color: var(--dc-muted); line-height: 1.7; }
+.danger-text { color: #b91c1c; }
+.footer { font-size: 12px; color: #64748b; margin: 30px 0 10px; padding: 20px 0; border-top: 1px solid #e2e8f0; text-align: center; }
+.pill-switch { display: flex; gap: 8px; align-items: center; font-size: 13px; color: #475569; font-weight: 600; }
+.preview-time { max-width: 230px; }
+@media (max-width: 780px) {
+  .wrap { padding: 17px 18px; }
+  .stats { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .grid { grid-template-columns: 1fr; }
+  .card { padding: 17px; }
+  .top h1 { font-size: 19px; }
+  .header-separator { display: none; }
+  .brand-row { flex-wrap: wrap; }
+  .header-label { flex-basis: 100%; padding-left: 55px; }
+}
+@media (max-width: 480px) {
+  .wrap { padding: 14px 16px; }
+  .top .wrap { padding-top: 12px; padding-bottom: 13px; }
+  .top .split { align-items: flex-start; }
+  .top h1 { font-size: 18px; }
+  .site-name { font-size: 15px; }
+  .site-subtitle { font-size: 10px; }
+  .brand-row { gap: 9px; }
+  .header-label { padding-left: 45px; }
+  .badge-proto { margin-left: 45px; font-size: 11px; }
+  .logo-box { height: 36px; width: 36px; flex-basis: 36px; }
+  .stats { gap: 9px; }
+  .stat { padding: 14px 12px; }
+  .stat strong { font-size: 23px; }
+  .card { padding: 15px; margin-top: 13px; }
+  .btn { font-size: 13px; padding: 9px 11px; }
+  .mini { font-size: 12px; padding: 7px 9px; }
+  .toolbar { gap: 7px; }
+  .dialog { padding: 18px 15px; }
+  .msg { padding: 15px; }
+  .pill-switch { width: 100%; justify-content: flex-start; }
+}
+@media print {
+  .no-print { display: none !important; }
+  .top { color: #111; background: #fff; box-shadow: none; }
+  .top .muted,.site-name,.site-subtitle { color: #111; }
+  .logo-box { border-color: #bbb; color: #111; background: #fff; }
+  .wrap { padding: 0; }
+  .card,.stat { box-shadow: none; }
+}
+</style>
 </head>
-<body class="bg-slate-100 min-h-screen p-4 sm:p-8 text-slate-800">
-
-  <!-- 🔒 登入遮罩 Modal (未登入時全螢幕顯示) -->
-  <div id="login-overlay" class="fixed inset-0 bg-slate-900 z-[100] flex items-center justify-center p-4">
-    <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl p-8">
-      <div class="text-center mb-6">
-        <h2 class="text-2xl font-bold text-slate-900">📂 案件管理系統</h2>
-        <p class="text-sm text-slate-500 mt-1">請輸入承辦人帳號密碼進行登入</p>
-      </div>
-
-      <form id="login-form" onsubmit="handleLogin(event)" class="space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">帳號 (如: 001, 002...)</label>
-          <input type="text" id="login-account" required placeholder="請輸入帳號" class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">密碼 (預設: 001001)</label>
-          <input type="password" id="login-password" required placeholder="請輸入密碼" class="w-full px-4 py-2.5 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-        </div>
-
-        <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl shadow-lg transition">
-          🚀 登入系統
-        </button>
-      </form>
-    </div>
-  </div>
-
-  <!-- 📍 右側浮動快捷按鈕 (至最頂端 / 至最底部) -->
-  <div class="fixed right-4 bottom-8 flex flex-col gap-2 z-50 no-print">
-    <button onclick="window.scrollTo({top: 0, behavior: 'smooth'})" title="移至最上面" class="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center justify-center font-bold text-sm transition transform hover:scale-110">
-      ▲
-    </button>
-    <button onclick="window.scrollTo({top: document.body.scrollHeight, behavior: 'smooth'})" title="移至最下面" class="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 text-white rounded-full shadow-xl flex items-center justify-center font-bold text-sm transition transform hover:scale-110">
-      ▼
-    </button>
-  </div>
-
-  <!-- 主系統容器 -->
-  <div id="main-app" class="max-w-4xl mx-auto hidden">
-    
-    <!-- A4 列印專用標題與時間戳記 -->
-    <div class="print-header hidden mb-4 pb-2 border-b-2 border-slate-800">
-      <h2 class="text-xl font-bold text-slate-900">📋 案件管理系統 - 開會報表</h2>
-      <p id="print-timestamp" class="text-sm text-slate-600 mt-1"></p>
-    </div>
-
-    <!-- 頂部登入資訊與操作列 -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 no-print">
-      <div>
-        <h1 class="text-2xl font-bold text-slate-900">📋 案件管理系統</h1>
-        <div class="flex flex-wrap items-center gap-2 mt-1">
-          <span id="user-badge" class="bg-indigo-100 text-indigo-800 text-xs px-2.5 py-1 rounded-full font-semibold"></span>
-          <p class="text-sm text-slate-500">勾選案件可快速產生 LINE 進度回報或列印開會報表</p>
-        </div>
-      </div>
-
-      <div class="flex flex-wrap gap-2 items-center justify-end sm:ml-auto">
-        <button id="btn-toggle-gantt-panel" onclick="toggleGanttPanel()" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-lg shadow text-sm font-medium transition flex items-center gap-1">
-          📊 甘特圖設定
-        </button>
-        <button id="btn-add-project" onclick="openAddProjectModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-lg shadow text-sm font-medium transition flex items-center gap-1">
-          ➕ 新增案件
-        </button>
-        <button id="btn-copy-line" onclick="copyLineText()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-lg shadow text-sm font-medium transition flex items-center gap-1">
-          💬 LINE 回報
-        </button>
-        <button onclick="triggerPrint()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3.5 py-2 rounded-lg shadow text-sm font-medium transition flex items-center gap-1">
-          🖨️ 列印 A4
-        </button>
-        <!-- 改密碼與登出放在同一組 flex 中保持同一行 -->
-        <div class="flex items-center gap-2">
-          <button onclick="openChangePwdModal()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 px-3 py-2 rounded-lg text-sm font-medium transition">
-            🔑 改密碼
-          </button>
-          <button onclick="handleLogout()" class="bg-rose-100 hover:bg-rose-200 text-rose-700 px-3 py-2 rounded-lg text-sm font-medium transition">
-            🚪 登出
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 📊 甘特圖排程設定控制抽屜 (手機友善，列印時隱藏) -->
-    <div id="gantt-setup-panel" class="hidden no-print bg-purple-50 border border-purple-200 p-4 rounded-xl mb-4 shadow-inner">
-      <div class="flex justify-between items-center mb-3">
-        <h3 class="font-bold text-purple-900 flex items-center gap-1 text-base">
-          📊 甘特圖顯示與工期調整 (點選日期或使用快捷按鈕)
-        </h3>
-        <button onclick="toggleGanttPanel()" class="text-purple-400 hover:text-purple-700 font-bold text-sm">收合 ✖</button>
-      </div>
-      <div id="gantt-controls-container" class="space-y-2.5 max-h-60 overflow-y-auto pr-1">
-        <!-- JS 動態生成項目設定列 -->
-      </div>
-    </div>
-
-    <!-- 檢視模式與歷史快照選單列 -->
-    <div class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 mb-4 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 no-print">
-      <div class="flex items-center gap-3 flex-1">
-        <label class="text-sm font-bold text-slate-700 whitespace-nowrap">📅 檢視模式：</label>
-        <select id="snapshot-select" onchange="handleSnapshotChange()" class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-          <option value="current">🟢 目前最新狀態 (可編輯)</option>
-        </select>
-      </div>
-      <button id="btn-delete-snapshot" onclick="deleteSelectedSnapshot()" class="hidden bg-rose-600 hover:bg-rose-700 text-white px-3.5 py-1.5 rounded-lg text-sm font-medium transition whitespace-nowrap flex items-center justify-center gap-1 shadow-sm">
-        🗑️ 移除此快照
-      </button>
-    </div>
-
-    <!-- 快照模式提醒橫幅 -->
-    <div id="snapshot-notice" class="hidden bg-amber-50 border-l-4 border-amber-400 p-4 mb-4 rounded-r-xl text-amber-800 text-sm font-medium">
-      ⚠️ 目前正在檢視【<span id="snapshot-date-text"></span>】歷史備份快照（唯讀模式，無法修改資料）。
-    </div>
-
-    <!-- 🔍 案件篩選工具列 -->
-    <div class="bg-white p-3.5 rounded-xl shadow-sm border border-slate-200 mb-4 flex flex-wrap items-center gap-3.5 no-print">
-      <label class="flex items-center gap-2 font-semibold text-sm text-slate-700 cursor-pointer select-none">
-        <input type="checkbox" id="selectAllCheckbox" onchange="toggleSelectAll(this)" class="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">
-        <span>全選</span>
-      </label>
-
-      <div class="h-5 w-px bg-slate-200"></div>
-
-      <div class="flex items-center gap-2">
-        <label for="filterAssignee" class="text-sm font-bold text-slate-700 whitespace-nowrap">承辦：</label>
-        <select id="filterAssignee" onchange="filterProjects()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-          <option value="">載入中...</option>
-        </select>
-      </div>
-
-      <div class="flex items-center gap-2">
-        <label for="filterAgency" class="text-sm font-bold text-slate-700 whitespace-nowrap">單位：</label>
-        <select id="filterAgency" onchange="filterProjects()" class="bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-          <option value="">全部單位</option>
-          <option value="建築中心">建築中心</option>
-          <option value="基金會">基金會</option>
-        </select>
-      </div>
-
-      <div class="flex-1 min-w-[200px]">
-        <input type="text" id="filterKeyword" oninput="filterProjects()" placeholder="🔍 輸入關鍵字搜尋案件名稱、狀態或聯絡人..." class="w-full bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-      </div>
-    </div>
-
-    <!-- 📱 LINE Bot 承辦人綁定提示卡片 -->
-    <div class="bg-emerald-50 border border-emerald-200 p-3.5 rounded-xl mb-6 text-emerald-800 text-sm no-print flex items-start gap-2">
-      <span class="text-base">📱</span>
-      <div>
-        <strong class="font-semibold">承辦人 LINE 週報機器人提醒：</strong>
-        首次加入 LINE 官方帳號時，請直接在對話框輸入<strong>「您的承辦名稱」</strong>進行綁定。系統將於每週最後工作日 14:30 自動推播個人週報摘要！
-      </div>
-    </div>
-
-    <!-- ==================== 1. 個案詳細內容卡片 (螢幕畫面主要顯示區) ==================== -->
-    <div id="project-cards-section" class="mb-6">
-      <!-- 案件列表容器 -->
-      <div id="project-list" class="space-y-4">
-        <div class="text-center py-10 text-slate-400">連線至資料庫載入中...</div>
-      </div>
-    </div>
-
-    <!-- ==================== 2. 近期重點案件與排程甘特圖 (置於畫面最下方，A4列印專用) ==================== -->
-    <div id="report-top-section" class="mb-6 bg-white p-5 rounded-xl border border-slate-200 shadow-sm print-section">
-      <h2 class="text-base font-bold text-slate-900 mb-3 border-l-4 border-indigo-600 pl-2">
-         近期重點案件與排程甘特圖
-      </h2>
-
-      <!-- 2.1 案件總覽對照表 -->
-      <div class="overflow-x-auto mb-4">
-        <table class="w-full text-left text-sm border-collapse border border-slate-200">
-          <thead>
-            <tr class="bg-slate-100 text-slate-700">
-              <th class="p-2 border border-slate-200 w-1/3">案名</th>
-              <th class="p-2 border border-slate-200 w-1/6">送審單位</th>
-              <th class="p-2 border border-slate-200 w-1/6">目前階段</th>
-              <th class="p-2 border border-slate-200">最新大事記</th>
-            </tr>
-          </thead>
-          <tbody id="summary-table-body">
-            <!-- JS 動態填入 -->
-          </tbody>
-        </table>
-      </div>
-
-      <!-- 2.2 甘特圖呈現區 -->
-      <div class="border border-slate-200 rounded-lg p-3.5 bg-slate-50">
-        <div class="flex justify-between items-center text-xs font-bold text-slate-500 mb-2">
-          <span>📅 近期執行案件甘特圖</span>
-          <span id="gantt-time-range-text">時間跨度：載入中...</span>
-        </div>
-
-        <!-- 時間軸標頭 -->
-        <div id="gantt-timeline-header" class="grid grid-cols-6 gap-1 text-center text-xs font-semibold text-slate-600 border-b pb-1.5 mb-2">
-          <!-- JS 動態填入月/週標籤 -->
-        </div>
-
-        <!-- 圖塊內容區 -->
-        <div id="gantt-bars-container" class="space-y-2">
-          <!-- JS 動態生成條狀圖 -->
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Modal 1: 新增案件彈窗 -->
-  <div id="add-project-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl p-6 relative max-h-[90vh] overflow-y-auto">
-      <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
-        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">➕ 新增案件</h3>
-        <button onclick="closeAddProjectModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
-      </div>
-
-      <form id="add-project-form" onsubmit="handleAddProject(event)" class="space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">案件名稱 *</label>
-          <input type="text" id="new-title" required placeholder="例如：中悅19F" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">承辦人 *</label>
-            <select id="new-assignee" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">送審單位 *</label>
-            <select id="new-agency" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
-              <option value="" disabled selected>請選擇送審單位</option>
-              <option value="建築中心">建築中心</option>
-              <option value="基金會">基金會</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">目前狀態 *</label>
-            <select id="new-status" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
-              <option value="" disabled selected>請選擇狀態</option>
-              <option value="評估">評估</option>
-              <option value="書審報告書製作">書審報告書製作</option>
-              <option value="內檢中">內檢中</option>
-              <option value="已掛件">已掛件</option>
-              <option value="意見回覆">意見回覆</option>
-              <option value="審議會簡報">審議會簡報</option>
-              <option value="最終版">最終版</option>
-              <option value="摘要">摘要</option>
-              <option value="紅/白皮書">紅/白皮書</option>
-              <option value="結案資料">結案資料</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">繳費狀況</label>
-            <select id="new-is-paid" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
-              <option value="false">🔴 未繳費</option>
-              <option value="true">🟢 已繳費</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="pt-2 border-t border-slate-100">
-          <label class="block text-xs font-semibold text-slate-600 mb-1">聯絡人資訊 (選填)</label>
-          <div class="grid grid-cols-2 gap-3">
-            <input type="text" id="new-contact-name" placeholder="聯絡人姓名" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-            <input type="text" id="new-contact-phone" placeholder="電話" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-          </div>
-        </div>
-
-        <div class="pt-2 border-t border-slate-100">
-          <label class="block text-xs font-semibold text-slate-600 mb-1">第一筆大事紀紀錄 (選填)</label>
-          <div class="grid grid-cols-3 gap-2">
-            <input type="date" id="new-log-date" class="w-full px-2 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-            <input type="text" id="new-log-event" placeholder="動態描述 (例:已掛件)" class="col-span-2 w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3">
-          <button type="button" onclick="closeAddProjectModal()" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">取消</button>
-          <button type="submit" class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium">建立案件</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Modal 2: 編輯案件彈窗 -->
-  <div id="edit-project-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white w-full max-w-lg rounded-2xl shadow-xl p-6 relative max-h-[90vh] overflow-y-auto">
-      <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
-        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">✏️ 編輯案件資料</h3>
-        <button onclick="closeEditProjectModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
-      </div>
-
-      <form id="edit-project-form" onsubmit="handleEditProject(event)" class="space-y-4">
-        <input type="hidden" id="edit-project-id">
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">案件名稱 *</label>
-          <input type="text" id="edit-title" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">承辦人 *</label>
-            <select id="edit-assignee" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">送審單位 *</label>
-            <select id="edit-agency" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
-              <option value="建築中心">建築中心</option>
-              <option value="基金會">基金會</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">目前狀態 *</label>
-            <select id="edit-status" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
-              <option value="評估">評估</option>
-              <option value="書審報告書製作">書審報告書製作</option>
-              <option value="內檢中">內檢中</option>
-              <option value="已掛件">已掛件</option>
-              <option value="意見回覆">意見回覆</option>
-              <option value="審議會簡報">審議會簡報</option>
-              <option value="最終版">最終版</option>
-              <option value="摘要">摘要</option>
-              <option value="紅/白皮書">紅/白皮書</option>
-              <option value="結案資料">結案資料</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs font-semibold text-slate-600 mb-1">繳費狀況</label>
-            <select id="edit-is-paid" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none bg-white">
-              <option value="false">🔴 未繳費</option>
-              <option value="true">🟢 已繳費</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="pt-2 border-t border-slate-100">
-          <label class="block text-xs font-semibold text-slate-600 mb-1">聯絡人資訊 (選填)</label>
-          <div class="grid grid-cols-2 gap-3">
-            <input type="text" id="edit-contact-name" placeholder="聯絡人姓名" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-            <input type="text" id="edit-contact-phone" placeholder="電話" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3">
-          <button type="button" onclick="closeEditProjectModal()" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">取消</button>
-          <button type="submit" class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium">儲存變更</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Modal 3: 新增大事紀彈窗 -->
-  <div id="add-log-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl p-6 relative">
-      <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
-        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">📝 新增大事紀進度</h3>
-        <button onclick="closeAddLogModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
-      </div>
-
-      <form id="add-log-form" onsubmit="handleAddLog(event)" class="space-y-4">
-        <input type="hidden" id="log-project-id">
-        
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">選擇日期</label>
-          <input type="date" id="log-date-picker" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">進度 / 動態描述</label>
-          <input type="text" id="log-event" required placeholder="例如：補件完成、取得許可函..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-none">
-          
-          <div class="flex flex-wrap gap-1.5 mt-2.5">
-            <button type="button" onclick="setLogEventText('log-event', '已繳費')" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs rounded border border-emerald-200 font-medium">已繳費</button>
-            <button type="button" onclick="setLogEventText('log-event', '已掛件')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">已掛件</button>
-            <button type="button" onclick="setLogEventText('log-event', '內檢中')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">內檢中</button>
-            <button type="button" onclick="setLogEventText('log-event', '意見回覆')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">意見回覆</button>
-            <button type="button" onclick="setLogEventText('log-event', '評估')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">評估</button>
-            <button type="button" onclick="setLogEventText('log-event', '書審報告書製作')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">書審報告書製作</button>
-            <button type="button" onclick="setLogEventText('log-event', '審議會簡報')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">審議會簡報</button>
-            <button type="button" onclick="setLogEventText('log-event', '摘要')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">摘要</button>
-            <button type="button" onclick="setLogEventText('log-event', '最終版')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">最終版</button>
-            <button type="button" onclick="setLogEventText('log-event', '紅/白皮書')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">紅/白皮書</button>
-            <button type="button" onclick="setLogEventText('log-event', '結案資料')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">結案資料</button>
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3">
-          <button type="button" onclick="closeAddLogModal()" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">取消</button>
-          <button type="submit" class="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg text-sm font-medium">更新動態</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Modal 4: 編輯大事紀彈窗 -->
-  <div id="edit-log-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl p-6 relative">
-      <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
-        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">✏️ 編輯大事紀紀錄</h3>
-        <button onclick="closeEditLogModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
-      </div>
-
-      <form id="edit-log-form" onsubmit="handleEditLog(event)" class="space-y-4">
-        <input type="hidden" id="edit-log-project-id">
-        <input type="hidden" id="edit-log-index">
-        
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">選擇日期</label>
-          <input type="date" id="edit-log-date-picker" required class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-        </div>
-
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">進度 / 動態描述</label>
-          <input type="text" id="edit-log-event" required placeholder="例如：補件完成、取得許可函..." class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none">
-          
-          <div class="flex flex-wrap gap-1.5 mt-2.5">
-            <button type="button" onclick="setLogEventText('edit-log-event', '已繳費')" class="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs rounded border border-emerald-200 font-medium">已繳費</button>
-            <button type="button" onclick="setLogEventText('edit-log-event', '已掛件')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">已掛件</button>
-            <button type="button" onclick="setLogEventText('edit-log-event', '內檢中')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">內檢中</button>
-            <button type="button" onclick="setLogEventText('edit-log-event', '意見回覆')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">意見回覆</button>
-            <button type="button" onclick="setLogEventText('edit-log-event', '評估')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">評估</button>
-            <button type="button" onclick="setLogEventText('edit-log-event', '書審報告書製作')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">書審報告書製作</button>
-            <button type="button" onclick="setLogEventText('edit-log-event', '審議會簡報')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">審議會簡報</button>
-            <button type="button" onclick="setLogEventText('edit-log-event', '摘要')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">摘要</button>
-            <button type="button" onclick="setLogEventText('edit-log-event', '最終版')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">最終版</button>
-            <button type="button" onclick="setLogEventText('edit-log-event', '紅/白皮書')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">紅/白皮書</button>
-            <button type="button" onclick="setLogEventText('edit-log-event', '結案資料')" class="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-200">結案資料</button>
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3">
-          <button type="button" onclick="closeEditLogModal()" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">取消</button>
-          <button type="submit" class="px-4 py-2 bg-blue-600 text-white hover:bg-blue-700 rounded-lg text-sm font-medium">儲存變更</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <!-- Modal 5: 修改密碼彈窗 -->
-  <div id="change-pwd-modal" class="hidden fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-    <div class="bg-white w-full max-w-md rounded-2xl shadow-xl p-6 relative">
-      <div class="flex justify-between items-center pb-3 border-b border-slate-100 mb-4">
-        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">🔑 修改個人密碼</h3>
-        <button onclick="closeChangePwdModal()" class="text-slate-400 hover:text-slate-600 text-xl font-bold">&times;</button>
-      </div>
-
-      <form onsubmit="handleChangePwd(event)" class="space-y-4">
-        <div>
-          <label class="block text-xs font-semibold text-slate-600 mb-1">新密碼</label>
-          <input type="password" id="new-password" required placeholder="請輸入新密碼" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
-        </div>
-
-        <div class="flex justify-end gap-2 pt-3">
-          <button type="button" onclick="closeChangePwdModal()" class="px-4 py-2 bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-lg text-sm font-medium">取消</button>
-          <button type="submit" class="px-4 py-2 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-sm font-medium">確認修改</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <script>
-    // Supabase 連線設定
-    const SUPABASE_URL = 'https://chcxlpcqjabtgyxtsekg.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_Vk1aTMGX1-KZreO1yQPhdg_37sbeQFL';
-    
-    const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    let projectsData = [];
-    let currentUser = null; // 當前登入者資訊
-    let currentSelectedSnapshotId = null; // 當前選取的快照 ID
-    let isReadOnlyMode = false;
-
-    // 可用的甘特圖圖塊色彩清單
-    const ganttColors = [
-      'bg-indigo-500', 'bg-blue-500', 'bg-emerald-500', 
-      'bg-amber-500', 'bg-purple-500', 'bg-teal-500', 'bg-rose-500'
-    ];
-
-    // 初始化檢查 Session
-    document.addEventListener("DOMContentLoaded", () => {
-      const savedUser = localStorage.getItem('app_user_session');
-      if (savedUser) {
-        currentUser = JSON.parse(savedUser);
-        initAppView();
-      }
-    });
-
-    // 處理登入提交
-    async function handleLogin(event) {
-      event.preventDefault();
-      const account = document.getElementById('login-account').value.trim();
-      const pwd = document.getElementById('login-password').value.trim();
-
-      const { data, error } = await supabaseClient
-        .from('users')
-        .select('*')
-        .eq('account', account)
-        .eq('password', pwd)
-        .single();
-
-      if (error || !data) {
-        alert('❌ 帳號或密碼錯誤！');
-        return;
-      }
-
-      currentUser = data;
-      localStorage.setItem('app_user_session', JSON.stringify(data));
-      document.getElementById('login-form').reset();
-      initAppView();
-    }
-
-    // 登出
-    function handleLogout() {
-      localStorage.removeItem('app_user_session');
-      currentUser = null;
-      document.getElementById('login-overlay').classList.remove('hidden');
-      document.getElementById('main-app').classList.add('hidden');
-    }
-
-    // 初始化已登入介面
-    function initAppView() {
-      document.getElementById('login-overlay').classList.add('hidden');
-      document.getElementById('main-app').classList.remove('hidden');
-
-      const badge = document.getElementById('user-badge');
-      badge.innerText = `👤 ${currentUser.name} (${currentUser.role === 'admin' ? '管理者' : '承辦人'})`;
-
-      fetchProjects();
-    }
-
-    // 🛠️ 動態設定承辦人選單
-    async function setupAssigneeDropdowns() {
-      const filterAssignee = document.getElementById('filterAssignee');
-      const newAssignee = document.getElementById('new-assignee');
-      const editAssignee = document.getElementById('edit-assignee');
-
-      if (currentUser.role !== 'admin') {
-        const userOption = `<option value="${currentUser.name}">${currentUser.name}</option>`;
-        if (filterAssignee) { filterAssignee.innerHTML = userOption; filterAssignee.value = currentUser.name; filterAssignee.disabled = true; }
-        if (newAssignee) { newAssignee.innerHTML = userOption; newAssignee.value = currentUser.name; newAssignee.disabled = true; }
-        if (editAssignee) { editAssignee.innerHTML = userOption; editAssignee.value = currentUser.name; editAssignee.disabled = true; }
-      } else {
-        let assigneeSet = new Set();
-        if (currentUser.name) assigneeSet.add(currentUser.name);
-
-        try {
-          const { data: lineData, error } = await supabaseClient.from('users_line').select('handler_name');
-          if (!error && lineData) {
-            lineData.forEach(item => {
-              if (item.handler_name && item.handler_name.trim() !== '') {
-                assigneeSet.add(item.handler_name.trim());
-              }
-            });
-          }
-        } catch (e) {
-          console.error("抓取 users_line 失敗:", e);
-        }
-
-        const assigneeList = Array.from(assigneeSet);
-
-        if (filterAssignee) {
-          filterAssignee.disabled = false;
-          let filterHtml = '<option value="">全部承辦人</option>';
-          assigneeList.forEach(name => filterHtml += `<option value="${name}">${name}</option>`);
-          filterAssignee.innerHTML = filterHtml;
-        }
-
-        const modalHtml = assigneeList.map(name => `<option value="${name}">${name}</option>`).join('');
-        if (newAssignee) { newAssignee.disabled = false; newAssignee.innerHTML = modalHtml; }
-        if (editAssignee) { editAssignee.disabled = false; editAssignee.innerHTML = modalHtml; }
-      }
-    }
-
-    // 確保每筆案件有預設的甘特圖欄位狀態
-    function ensureGanttDefaults(projects) {
-      const todayISO = getTodayISO();
-      projects.forEach((p, idx) => {
-        if (p.inGantt === undefined) p.inGantt = true;
-        
-        if (!p.gantt_start) {
-          if (Array.isArray(p.logs) && p.logs.length > 0) {
-            p.gantt_start = parseCustomDateToISO(p.logs[p.logs.length - 1].date);
-          } else {
-            p.gantt_start = todayISO;
-          }
-        }
-
-        if (!p.gantt_end) {
-          const d = new Date(p.gantt_start);
-          d.setDate(d.getDate() + 30);
-          p.gantt_end = d.toISOString().split('T')[0];
-        }
-
-        p.ganttColor = ganttColors[idx % ganttColors.length];
-      });
-    }
-
-    // 從 Supabase 抓取案件資料
-    async function fetchProjects() {
-      const { data, error } = await supabaseClient
-        .from('projects')
-        .select('*')
-        .order('id', { ascending: true });
-
-      if (error) {
-        document.getElementById('project-list').innerHTML = `
-          <div class="bg-red-50 text-red-600 p-4 rounded-xl border border-red-200">
-            ❌ 載入失敗：${error.message}
-          </div>`;
-        return;
-      }
-
-      projectsData = currentUser.role === 'admin' 
-        ? data 
-        : data.filter(p => p.assignee === currentUser.name);
-
-      ensureGanttDefaults(projectsData);
-      renderProjects(projectsData, false);
-      fetchSnapshotsList();
-      await setupAssigneeDropdowns();
-    }
-
-    // 讀取歷史快照選單
-    async function fetchSnapshotsList() {
-      const { data, error } = await supabaseClient
-        .from('weekly_snapshots')
-        .select('id, created_at, snapshot_data')
-        .order('created_at', { ascending: false });
-
-      if (error || !data) return;
-
-      const select = document.getElementById('snapshot-select');
-      select.innerHTML = '<option value="current">🟢 目前最新狀態 (可編輯)</option>';
-
-      const hiddenList = currentUser.role !== 'admin'
-        ? JSON.parse(localStorage.getItem('hidden_snapshots_' + currentUser.account) || '[]')
-        : [];
-
-      data.forEach(s => {
-        if (currentUser.role !== 'admin' && hiddenList.includes(s.id)) return;
-
-        const dateObj = new Date(s.created_at);
-        const yyyy = dateObj.getFullYear();
-        const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-        const dd = String(dateObj.getDate()).padStart(2, '0');
-        const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-        const weekDay = weekDays[dateObj.getDay()];
-        const timeStr = dateObj.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' });
-
-        let countText = '';
-        if (currentUser.role !== 'admin' && Array.isArray(s.snapshot_data)) {
-          const myCount = s.snapshot_data.filter(p => p.assignee === currentUser.name).length;
-          countText = ` (${myCount} 筆您的案件)`;
-        }
-
-        const opt = document.createElement('option');
-        opt.value = JSON.stringify({ id: s.id, snapshot_data: s.snapshot_data });
-        opt.textContent = `📅 ${yyyy}-${mm}-${dd} (${weekDay}) ${timeStr} 歷史快照${countText}`;
-        select.appendChild(opt);
-      });
-    }
-
-    // 切換快照模式處理
-    function handleSnapshotChange() {
-      const select = document.getElementById('snapshot-select');
-      const notice = document.getElementById('snapshot-notice');
-      const btnAdd = document.getElementById('btn-add-project');
-      const btnCopy = document.getElementById('btn-copy-line');
-      const btnDeleteSnap = document.getElementById('btn-delete-snapshot');
-      const dateText = document.getElementById('snapshot-date-text');
-
-      if (select.value === 'current') {
-        isReadOnlyMode = false;
-        currentSelectedSnapshotId = null;
-        notice.classList.add('hidden');
-        btnDeleteSnap.classList.add('hidden');
-        btnAdd.classList.remove('hidden');
-        btnCopy.classList.remove('hidden');
-        renderProjects(projectsData, false);
-      } else {
-        isReadOnlyMode = true;
-        const selectedObj = JSON.parse(select.value);
-        currentSelectedSnapshotId = selectedObj.id;
-        let snapshotData = selectedObj.snapshot_data || [];
-
-        if (currentUser.role !== 'admin') {
-          snapshotData = snapshotData.filter(p => p.assignee === currentUser.name);
-        }
-
-        ensureGanttDefaults(snapshotData);
-        notice.classList.remove('hidden');
-        btnDeleteSnap.classList.remove('hidden');
-        btnAdd.classList.add('hidden');
-        btnCopy.classList.add('hidden');
-        dateText.innerText = select.options[select.selectedIndex].text;
-        renderProjects(snapshotData, true);
-      }
-    }
-
-    // 刪除 / 隱藏歷史快照
-    async function deleteSelectedSnapshot() {
-      if (!currentSelectedSnapshotId) return;
-
-      if (currentUser.role === 'admin') {
-        if (confirm('【管理者權限】確定要從資料庫徹底刪除這筆歷史快照嗎？\n(此動作無法復原)')) {
-          const { error } = await supabaseClient
-            .from('weekly_snapshots')
-            .delete()
-            .eq('id', currentSelectedSnapshotId);
-
-          if (error) {
-            alert('刪除失敗：' + error.message);
-          } else {
-            alert('✅ 已從資料庫成功刪除該歷史快照！');
-            resetToCurrentMode();
-          }
-        }
-      } else {
-        if (confirm('確定要移除這筆歷史快照嗎？\n(移除後您的選單將不再顯示，但 001 管理者仍會保留完整備份)')) {
-          let hiddenList = JSON.parse(localStorage.getItem('hidden_snapshots_' + currentUser.account) || '[]');
-          if (!hiddenList.includes(currentSelectedSnapshotId)) {
-            hiddenList.push(currentSelectedSnapshotId);
-            localStorage.setItem('hidden_snapshots_' + currentUser.account, JSON.stringify(hiddenList));
-          }
-          alert('✅ 已為您移除此歷史快照！');
-          resetToCurrentMode();
-        }
-      }
-    }
-
-    function resetToCurrentMode() {
-      document.getElementById('snapshot-select').value = 'current';
-      handleSnapshotChange();
-      fetchSnapshotsList();
-    }
-
-    // 🔍 複合篩選與搜尋邏輯
-    function filterProjects() {
-      const assignee = document.getElementById('filterAssignee')?.value.toLowerCase().trim() || '';
-      const agency = document.getElementById('filterAgency')?.value.toLowerCase().trim() || '';
-      const keyword = document.getElementById('filterKeyword')?.value.toLowerCase().trim() || '';
-
-      const visibleProjects = projectsData.filter(p => {
-        const titleStr = (p.title || '').toLowerCase();
-        const statusStr = (p.status || '').toLowerCase();
-        const assigneeStr = (p.assignee || '').toLowerCase();
-        const agencyStr = (p.agency || '').toLowerCase();
-        const contactsStr = (p.contacts || []).map(c => `${c.name}${c.phone}`).join('').toLowerCase();
-        const fullText = `${titleStr} ${statusStr} ${assigneeStr} ${agencyStr} ${contactsStr}`;
-
-        const matchAssignee = !assignee || assigneeStr.includes(assignee);
-        const matchAgency = !agency || agencyStr.includes(agency);
-        const matchKeyword = !keyword || fullText.includes(keyword);
-
-        return matchAssignee && matchAgency && matchKeyword;
-      });
-
-      // 重新渲染報表與卡片
-      renderTopReportSection(visibleProjects);
-      renderProjectCards(visibleProjects, isReadOnlyMode);
-
-      const selectAll = document.getElementById('selectAllCheckbox');
-      if (selectAll) selectAll.checked = false;
-    }
-
-    // 📊 切換甘特圖設定面板展開/收合
-    function toggleGanttPanel() {
-      const panel = document.getElementById('gantt-setup-panel');
-      panel.classList.toggle('hidden');
-    }
-
-    // 渲染甘特圖設定控制項 (手機友善：日期選擇器與快捷 +1週/+2週)
-    function renderGanttSetupControls(projects) {
-      const container = document.getElementById('gantt-controls-container');
-      if (!projects || projects.length === 0) {
-        container.innerHTML = `<div class="text-xs text-purple-400 py-2 text-center">無案件資料</div>`;
-        return;
-      }
-
-      container.innerHTML = projects.map(p => `
-        <div class="bg-white p-2.5 rounded-lg border border-purple-100 flex flex-wrap items-center justify-between gap-2 text-xs">
-          <label class="flex items-center gap-2 font-bold text-slate-800 min-w-[140px] cursor-pointer">
-            <input type="checkbox" ${p.inGantt ? 'checked' : ''} onchange="toggleProjectGantt(${p.id})" class="w-4 h-4 text-purple-600 rounded">
-            <span>${p.title || '未命名案件'}</span>
-          </label>
-
-          ${p.inGantt ? `
-            <div class="flex flex-wrap items-center gap-2">
-              <span>起：</span>
-              <input type="date" value="${p.gantt_start}" onchange="updateGanttDate(${p.id}, 'gantt_start', this.value)" class="border border-slate-300 rounded px-1.5 py-0.5 text-xs">
-              <span>迄：</span>
-              <input type="date" value="${p.gantt_end}" onchange="updateGanttDate(${p.id}, 'gantt_end', this.value)" class="border border-slate-300 rounded px-1.5 py-0.5 text-xs">
-              
-              <div class="flex gap-1 ml-1">
-                <button type="button" onclick="addGanttWeeks(${p.id}, 1)" class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded hover:bg-purple-200 font-medium">+1週</button>
-                <button type="button" onclick="addGanttWeeks(${p.id}, 2)" class="bg-purple-100 text-purple-800 px-2 py-0.5 rounded hover:bg-purple-200 font-medium">+2週</button>
-              </div>
-            </div>
-          ` : '<span class="text-slate-400">（未繪製於甘特圖）</span>'}
-        </div>
-      `).join('');
-    }
-
-    function toggleProjectGantt(id) {
-      const p = projectsData.find(item => item.id === id);
-      if (p) {
-        p.inGantt = !p.inGantt;
-        filterProjects();
-      }
-    }
-
-    function updateGanttDate(id, field, val) {
-      const p = projectsData.find(item => item.id === id);
-      if (p && val) {
-        p[field] = val;
-        filterProjects();
-      }
-    }
-
-    function addGanttWeeks(id, weeks) {
-      const p = projectsData.find(item => item.id === id);
-      if (p && p.gantt_end) {
-        const d = new Date(p.gantt_end);
-        d.setDate(d.getDate() + (weeks * 7));
-        p.gantt_end = d.toISOString().split('T')[0];
-        filterProjects();
-      }
-    }
-
-    // 渲染對照表與甘特圖 (置於最下方)
-    function renderTopReportSection(projects) {
-      renderGanttSetupControls(projects);
-
-      // 填入對照表
-      const tbody = document.getElementById('summary-table-body');
-      if (projects.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="4" class="p-3 text-center text-slate-400 text-xs">無符合案件</td></tr>`;
-      } else {
-        tbody.innerHTML = projects.map(p => {
-          const logs = Array.isArray(p.logs) ? p.logs : [];
-          const lastLog = logs.length > 0 ? logs[logs.length - 1] : null;
-          const logText = lastLog ? `<span class="font-bold text-slate-800">${lastLog.date}</span> ${lastLog.event}` : '無紀錄';
-
-          return `
-            <tr class="border-b border-slate-200 hover:bg-slate-50">
-              <td class="p-2 border border-slate-200 font-bold text-slate-800">${p.title || '未命名案件'}</td>
-              <td class="p-2 border border-slate-200 text-xs">${p.agency || '未填'}</td>
-              <td class="p-2 border border-slate-200"><span class="px-2 py-0.5 rounded text-xs bg-indigo-50 text-indigo-700 font-semibold">${p.status || '評估'}</span></td>
-              <td class="p-2 border border-slate-200 text-xs text-slate-600">${logText}</td>
-            </tr>
-          `;
-        }).join('');
-      }
-
-      // 計算並渲染甘特圖條狀圖
-      const ganttContainer = document.getElementById('gantt-bars-container');
-      const timeHeader = document.getElementById('gantt-timeline-header');
-      const rangeText = document.getElementById('gantt-time-range-text');
-
-      const ganttProjects = projects.filter(p => p.inGantt);
-
-      if (ganttProjects.length === 0) {
-        ganttContainer.innerHTML = `<div class="text-xs text-slate-400 py-4 text-center">無勾選納入甘特圖的案件</div>`;
-        timeHeader.innerHTML = `<div>目前無圖表</div>`;
-        rangeText.innerText = `時間跨度：-`;
-        return;
-      }
-
-      // 自動推算時間軸的 min 與 max
-      let minTimestamp = Infinity;
-      let maxTimestamp = -Infinity;
-
-      ganttProjects.forEach(p => {
-        const sTime = new Date(p.gantt_start).getTime();
-        const eTime = new Date(p.gantt_end).getTime();
-        if (sTime < minTimestamp) minTimestamp = sTime;
-        if (eTime > maxTimestamp) maxTimestamp = eTime;
-      });
-
-      // 確保至少有 30 天的時間寬度
-      if (maxTimestamp <= minTimestamp) {
-        maxTimestamp = minTimestamp + (30 * 24 * 3600 * 1000);
-      }
-
-      const totalSpanDays = Math.max(1, (maxTimestamp - minTimestamp) / (24 * 3600 * 1000));
-      const startDateObj = new Date(minTimestamp);
-      const endDateObj = new Date(maxTimestamp);
-
-      rangeText.innerText = `時間跨度：${startDateObj.getFullYear()}/${startDateObj.getMonth()+1}/${startDateObj.getDate()} ~ ${endDateObj.getFullYear()}/${endDateObj.getMonth()+1}/${endDateObj.getDate()}`;
-
-      // 自動產生 6 個時間軸區段標籤
-      let headerHtml = '';
-      for (let i = 0; i < 6; i++) {
-        const tickTime = new Date(minTimestamp + (totalSpanDays * (i / 6) * 24 * 3600 * 1000));
-        headerHtml += `<div>${tickTime.getMonth()+1}/${tickTime.getDate()}</div>`;
-      }
-      timeHeader.innerHTML = headerHtml;
-
-      // 繪製條狀圖
-      ganttContainer.innerHTML = ganttProjects.map(p => {
-        const sTime = new Date(p.gantt_start).getTime();
-        const eTime = new Date(p.gantt_end).getTime();
-
-        let leftPercent = Math.max(0, ((sTime - minTimestamp) / (totalSpanDays * 24 * 3600 * 1000)) * 100);
-        let widthPercent = Math.min(100 - leftPercent, Math.max(8, ((eTime - sTime) / (totalSpanDays * 24 * 3600 * 1000)) * 100));
-
-        const startDisp = p.gantt_start ? p.gantt_start.slice(5) : '';
-        const endDisp = p.gantt_end ? p.gantt_end.slice(5) : '';
-
-        return `
-          <div class="flex items-center text-xs my-1">
-            <div class="w-28 font-bold text-slate-800 truncate pr-2" title="${p.title}">${p.title}</div>
-            <div class="flex-1 bg-slate-200 h-6 rounded relative overflow-hidden">
-              <div class="absolute h-full ${p.ganttColor || 'bg-indigo-500'} text-white text-[10px] flex items-center px-2 font-medium rounded shadow-sm whitespace-nowrap"
-                   style="left: ${leftPercent}%; width: ${widthPercent}%;">
-                ${startDisp} ~ ${endDisp}
-              </div>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    // ☑ 全選 / 全不選功能
-    function toggleSelectAll(selectAllEl) {
-      const isChecked = selectAllEl.checked;
-      const visibleCheckboxes = document.querySelectorAll('#project-list .card:not(.hidden) input[type="checkbox"]');
-      visibleCheckboxes.forEach(cb => cb.checked = isChecked);
-    }
-
-    // 渲染案件列表
-    function renderProjects(projects, isReadOnly = false) {
-      renderTopReportSection(projects);
-      renderProjectCards(projects, isReadOnly);
-    }
-
-    function renderProjectCards(projects, isReadOnly = false) {
-      const listContainer = document.getElementById('project-list');
-      if (!projects || projects.length === 0) {
-        listContainer.innerHTML = '<div class="bg-white p-8 rounded-xl text-center text-slate-500">目前無您的案件紀錄</div>';
-        return;
-      }
-
-      listContainer.innerHTML = projects.map(p => {
-        const logs = Array.isArray(p.logs) ? p.logs : [];
-        const contacts = Array.isArray(p.contacts) ? p.contacts : [];
-
-        return `
-          <div class="card bg-white p-5 rounded-xl shadow-sm border border-slate-200 transition">
-            <div class="flex items-start justify-between gap-3">
-              <div class="flex items-center gap-3">
-                ${!isReadOnly ? `<input type="checkbox" id="check-${p.id}" value="${p.id}" class="no-print w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">` : ''}
-                <label for="check-${p.id}" class="font-bold text-lg text-slate-900 ${!isReadOnly ? 'cursor-pointer hover:text-indigo-600' : ''}">${p.title || '未命名案件'}</label>
-              </div>
-              <div class="flex items-center gap-2">
-                ${!isReadOnly ? `
-                  <button onclick="openEditProjectModal(${p.id})" class="no-print text-xs text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-2.5 py-1 rounded-md font-medium border border-blue-200 transition">
-                    ✏️ 編輯
-                  </button>
-                  <button onclick="togglePaidStatus(${p.id},${!p.is_paid})" class="no-print text-xs transition cursor-pointer">
-                    ${p.is_paid 
-                      ? '<span class="bg-emerald-100 text-emerald-800 hover:bg-emerald-200 px-3 py-1 rounded-full font-semibold">🟢 已繳費</span>' 
-                      : '<span class="bg-rose-100 text-rose-800 hover:bg-rose-200 px-3 py-1 rounded-full font-semibold">🔴 未繳費</span>'}
-                  </button>
-                ` : `
-                  <span class="text-xs ${p.is_paid ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'} px-3 py-1 rounded-full font-semibold">
-                    ${p.is_paid ? '🟢 已繳費' : '🔴 未繳費'}
-                  </span>
-                  <span class="no-print text-xs text-slate-400 bg-slate-100 px-2.5 py-1 rounded-md font-medium">🔒 唯讀快照</span>
-                `}
-              </div>
-            </div>
-
-            <div class="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm text-slate-600 bg-slate-50 p-3 rounded-lg">
-              <div><span class="text-slate-400">承辦人：</span><span class="font-medium text-slate-800">${p.assignee || '未指定'}</span></div>
-              <div><span class="text-slate-400">送審單位：</span><span class="font-medium text-slate-800">${p.agency || '未填'}</span></div>
-              <div><span class="text-slate-400">目前狀態：</span><span class="font-medium text-slate-800">${p.status || '評估'}</span></div>
-              <div><span class="text-slate-400">聯絡人：</span><span class="font-medium text-slate-800">${contacts.map(c => `${c.name}(${c.phone})`).join(', ') || '無'}</span></div>
-            </div>
-
-            <!-- 大事紀時間軸 -->
-            <div class="mt-4">
-              <div class="flex items-center justify-between mb-2">
-                <div class="text-xs font-semibold text-slate-400">大事紀歷程：</div>
-                ${!isReadOnly ? `
-                  <button onclick="openAddLogModal(${p.id})" class="no-print text-xs text-emerald-600 hover:text-emerald-800 font-medium flex items-center gap-1">
-                    ➕ 新增歷程
-                  </button>
-                ` : ''}
-              </div>
-              <ul class="text-sm space-y-1 text-slate-700 pl-3 border-l-2 border-indigo-200">
-                ${logs.length > 0 ? logs.map((l, index) => `
-                  <li class="flex items-center justify-between py-0.5">
-                    <div>
-                      <span class="font-semibold text-slate-900">${l.date}</span>${l.event}
-                    </div>
-                    ${!isReadOnly ? `
-                      <div class="no-print flex items-center gap-2 text-xs">
-                        <button onclick="openEditLogModal(${p.id}, ${index})" class="text-blue-600 hover:text-blue-800 font-medium">編輯</button>
-                        <button onclick="deleteLog(${p.id}, ${index})" class="text-rose-500 hover:text-rose-700 font-medium">刪除</button>
-                      </div>
-                    ` : ''}
-                  </li>
-                `).join('') : '<li class="text-xs text-slate-400 italic">無紀錄</li>'}
-              </ul>
-            </div>
-          </div>
-        `;
-      }).join('');
-    }
-
-    // 修改密碼 Modal
-    function openChangePwdModal() {
-      document.getElementById('new-password').value = '';
-      document.getElementById('change-pwd-modal').classList.remove('hidden');
-    }
-    function closeChangePwdModal() { document.getElementById('change-pwd-modal').classList.add('hidden'); }
-    async function handleChangePwd(event) {
-      event.preventDefault();
-      const newPwd = document.getElementById('new-password').value.trim();
-
-      const { error } = await supabaseClient
-        .from('users')
-        .update({ password: newPwd })
-        .eq('account', currentUser.account);
-
-      if (error) {
-        alert('修改密碼失敗：' + error.message);
-      } else {
-        currentUser.password = newPwd;
-        localStorage.setItem('app_user_session', JSON.stringify(currentUser));
-        alert('✅ 密碼修改成功！');
-        closeChangePwdModal();
-      }
-    }
-
-    // 切換繳費狀態
-    async function togglePaidStatus(id, newStatus) {
-      if (isReadOnlyMode) return;
-      const { error } = await supabaseClient
-        .from('projects')
-        .update({ is_paid: newStatus })
-        .eq('id', id);
-
-      if (error) {
-        alert('更新失敗：' + error.message);
-      } else {
-        fetchProjects();
-      }
-    }
-
-    // 日期工具
-    function setLogEventText(inputId, text) { document.getElementById(inputId).value = text; }
-    function formatDateToCustom(dateString) {
-      if (!dateString) return '';
-      const dateObj = new Date(dateString);
-      const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-      return `${dateObj.getMonth() + 1}/${dateObj.getDate()}(${weekDays[dateObj.getDay()]})`;
-    }
-    function parseCustomDateToISO(customDateStr) {
-      if (!customDateStr) return getTodayISO();
-      const match = customDateStr.match(/(\d+)\/(\d+)/);
-      if (match) {
-        const month = String(match[1]).padStart(2, '0');
-        const day = String(match[2]).padStart(2, '0');
-        return `${new Date().getFullYear()}-${month}-${day}`;
-      }
-      return getTodayISO();
-    }
-    function getTodayISO() {
-      const today = new Date();
-      return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    }
-    function triggerPrint() {
-      const now = new Date();
-      const weekDays = ['日', '一', '二', '三', '四', '五', '六'];
-      document.getElementById('print-timestamp').innerText = `報表產出時間：${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()} (${weekDays[now.getDay()]}) ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-      window.print();
-    }
-
-    // 表單 modal
-    function openAddProjectModal() {
-      if (isReadOnlyMode) return;
-      document.getElementById('add-project-form').reset();
-      setupAssigneeDropdowns();
-      document.getElementById('new-log-date').value = getTodayISO();
-      document.getElementById('add-project-modal').classList.remove('hidden');
-    }
-    function closeAddProjectModal() { document.getElementById('add-project-modal').classList.add('hidden'); }
-
-    async function handleAddProject(event) {
-      event.preventDefault();
-      const title = document.getElementById('new-title').value.trim();
-      const assignee = document.getElementById('new-assignee').value;
-      const agency = document.getElementById('new-agency').value;
-      const status = document.getElementById('new-status').value;
-      const is_paid = document.getElementById('new-is-paid').value === 'true';
-
-      const contactName = document.getElementById('new-contact-name').value.trim();
-      const contactPhone = document.getElementById('new-contact-phone').value.trim();
-      const contacts = (contactName || contactPhone) ? [{ name: contactName, phone: contactPhone, role: '聯絡人' }] : [];
-
-      const logDateRaw = document.getElementById('new-log-date').value;
-      const logEvent = document.getElementById('new-log-event').value.trim();
-      const logs = logEvent ? [{ date: formatDateToCustom(logDateRaw), event: logEvent }] : [];
-
-      const { error } = await supabaseClient
-        .from('projects')
-        .insert([{ title, assignee, agency, status, is_paid, contacts, logs }]);
-
-      if (error) {
-        alert('新增案件失敗：' + error.message);
-      } else {
-        closeAddProjectModal();
-        fetchProjects();
-      }
-    }
-
-    function openEditProjectModal(id) {
-      if (isReadOnlyMode) return;
-      const p = projectsData.find(item => item.id === id);
-      if (!p) return;
-
-      document.getElementById('edit-project-id').value = p.id;
-      document.getElementById('edit-title').value = p.title || '';
-      
-      const editAssignee = document.getElementById('edit-assignee');
-      if (currentUser.role === 'admin') {
-        editAssignee.disabled = false;
-        editAssignee.value = p.assignee || currentUser.name;
-      } else {
-        editAssignee.value = currentUser.name;
-        editAssignee.disabled = true;
-      }
-
-      document.getElementById('edit-agency').value = p.agency || '建築中心';
-      document.getElementById('edit-status').value = p.status || '評估';
-      document.getElementById('edit-is-paid').value = p.is_paid ? 'true' : 'false';
-
-      const contacts = Array.isArray(p.contacts) && p.contacts.length > 0 ? p.contacts[0] : { name: '', phone: '' };
-      document.getElementById('edit-contact-name').value = contacts.name || '';
-      document.getElementById('edit-contact-phone').value = contacts.phone || '';
-
-      document.getElementById('edit-project-modal').classList.remove('hidden');
-    }
-    function closeEditProjectModal() { document.getElementById('edit-project-modal').classList.add('hidden'); }
-
-    async function handleEditProject(event) {
-      event.preventDefault();
-      const id = parseInt(document.getElementById('edit-project-id').value);
-      const title = document.getElementById('edit-title').value.trim();
-      const assignee = document.getElementById('edit-assignee').value;
-      const agency = document.getElementById('edit-agency').value;
-      const status = document.getElementById('edit-status').value;
-      const is_paid = document.getElementById('edit-is-paid').value === 'true';
-
-      const contactName = document.getElementById('edit-contact-name').value.trim();
-      const contactPhone = document.getElementById('edit-contact-phone').value.trim();
-      const contacts = (contactName || contactPhone) ? [{ name: contactName, phone: contactPhone, role: '聯絡人' }] : [];
-
-      const { error } = await supabaseClient
-        .from('projects')
-        .update({ title, assignee, agency, status, is_paid, contacts })
-        .eq('id', id);
-
-      if (error) {
-        alert('修改案件失敗：' + error.message);
-      } else {
-        closeEditProjectModal();
-        fetchProjects();
-      }
-    }
-
-    function openAddLogModal(projectId) {
-      if (isReadOnlyMode) return;
-      document.getElementById('add-log-form').reset();
-      document.getElementById('log-project-id').value = projectId;
-      document.getElementById('log-date-picker').value = getTodayISO();
-      document.getElementById('add-log-modal').classList.remove('hidden');
-    }
-    function closeAddLogModal() { document.getElementById('add-log-modal').classList.add('hidden'); }
-
-    async function handleAddLog(event) {
-      event.preventDefault();
-      const projectId = parseInt(document.getElementById('log-project-id').value);
-      const dateRaw = document.getElementById('log-date-picker').value;
-      const eventText = document.getElementById('log-event').value.trim();
-
-      const formattedDate = formatDateToCustom(dateRaw);
-      const project = projectsData.find(p => p.id === projectId);
-      if (!project) return;
-
-      const updatedLogs = [...(Array.isArray(project.logs) ? project.logs : []), { date: formattedDate, event: eventText }];
-
-      const { error } = await supabaseClient
-        .from('projects')
-        .update({ logs: updatedLogs })
-        .eq('id', projectId);
-
-      if (error) {
-        alert('新增動態失敗：' + error.message);
-      } else {
-        closeAddLogModal();
-        fetchProjects();
-      }
-    }
-
-    function openEditLogModal(projectId, logIndex) {
-      if (isReadOnlyMode) return;
-      const project = projectsData.find(p => p.id === projectId);
-      if (!project || !Array.isArray(project.logs) || !project.logs[logIndex]) return;
-
-      const logItem = project.logs[logIndex];
-      document.getElementById('edit-log-project-id').value = projectId;
-      document.getElementById('edit-log-index').value = logIndex;
-      document.getElementById('edit-log-date-picker').value = parseCustomDateToISO(logItem.date);
-      document.getElementById('edit-log-event').value = logItem.event || '';
-
-      document.getElementById('edit-log-modal').classList.remove('hidden');
-    }
-    function closeEditLogModal() { document.getElementById('edit-log-modal').classList.add('hidden'); }
-
-    async function handleEditLog(event) {
-      event.preventDefault();
-      const projectId = parseInt(document.getElementById('edit-log-project-id').value);
-      const logIndex = parseInt(document.getElementById('edit-log-index').value);
-      const dateRaw = document.getElementById('edit-log-date-picker').value;
-      const eventText = document.getElementById('edit-log-event').value.trim();
-
-      const formattedDate = formatDateToCustom(dateRaw);
-      const project = projectsData.find(p => p.id === projectId);
-      if (!project) return;
-
-      const updatedLogs = [...(Array.isArray(project.logs) ? project.logs : [])];
-      updatedLogs[logIndex] = { date: formattedDate, event: eventText };
-
-      const { error } = await supabaseClient
-        .from('projects')
-        .update({ logs: updatedLogs })
-        .eq('id', projectId);
-
-      if (error) {
-        alert('修改動態失敗：' + error.message);
-      } else {
-        closeEditLogModal();
-        fetchProjects();
-      }
-    }
-
-    async function deleteLog(projectId, logIndex) {
-      if (isReadOnlyMode) return;
-      if (!confirm('確定要刪除這筆大事紀紀錄嗎？')) return;
-
-      const project = projectsData.find(p => p.id === projectId);
-      if (!project) return;
-
-      const updatedLogs = (Array.isArray(project.logs) ? project.logs : []).filter((_, idx) => idx !== logIndex);
-
-      const { error } = await supabaseClient
-        .from('projects')
-        .update({ logs: updatedLogs })
-        .eq('id', projectId);
-
-      if (error) {
-        alert('刪除動態失敗：' + error.message);
-      } else {
-        fetchProjects();
-      }
-    }
-
-    function copyLineText() {
-      if (isReadOnlyMode) return;
-      const selectedIds = Array.from(document.querySelectorAll('#project-list input[type="checkbox"]:checked')).map(cb => parseInt(cb.value));
-      
-      if (selectedIds.length === 0) {
-        alert('請先勾選要回報的案件！');
-        return;
-      }
-
-      const selectedProjects = projectsData.filter(p => selectedIds.includes(p.id));
-      let textLines = [];
-
-      selectedProjects.forEach(p => {
-        const logs = Array.isArray(p.logs) ? p.logs : [];
-        const payStatusStr = p.is_paid ? '已繳費' : '未繳費';
-        
-        if (logs.length === 1) {
-          let eventText = logs[0].event;
-          if (!eventText.includes('繳費')) {
-            eventText += `(${payStatusStr})`;
-          }
-          textLines.push(`${p.title}-${logs[0].date}${eventText}`);
-        } else if (logs.length > 1) {
-          let block = `${p.title}-\n` + `${logs[logs.length - 1].date}${logs[logs.length - 1].event}`;
-          textLines.push(block);
-        } else {
-          textLines.push(`${p.title}-目前無動態`);
-        }
-      });
-
-      const finalText = textLines.join('\n\n') + '\n\n以上';
-
-      navigator.clipboard.writeText(finalText).then(() => {
-        alert('✅ 已複製 LINE 回報文字！可以直接貼到通訊軟體。');
-      });
-    }
-  </script>
-</body>
-</html>
+<body>
+<header class="top"><div class="wrap"><div class="split">
+<div class="brand-row"><div class="logo-box" aria-hidden="true">DC</div><div class="brand-identity"><div class="site-name">DC 線上作業系統</div><div class="site-subtitle">Fire Safety &amp; Performance Engineering</div></div><div class="header-separator" aria-hidden="true"></div><div class="header-label"><h1>工作助理 1.0</h1><div class="muted" style="font-size:12px;margin-top:3px">我的工作中心 · 第一批互動試用原型</div></div></div>
+<span class="badge-proto">不連接正式系統</span>
+</div></div></header>
+<main class="wrap">
+<div class="warn"><strong>安全試用說明：</strong>這是一份獨立、離線操作原型。所有資料只暫存在本頁記憶體中；重新整理就會重設，請勿輸入真實敏感案件或聯絡資料。<strong>沒有 Supabase 連線、沒有 LINE 推播、沒有修改你原本的 HTML。</strong>假日正式日曆同步也尚未實作。</div>
+<div class="stats"><div class="stat"><strong id="stat-today">0</strong><small>今日需處理</small></div><div class="stat"><strong id="stat-urgent">0</strong><small>重要／緊急未完成</small></div><div class="stat"><strong id="stat-overdue">0</strong><small>逾期未完成</small></div><div class="stat"><strong id="stat-done">0</strong><small>已完成</small></div></div>
+<div class="card"><div class="split"><div><h2 style="margin:0;font-size:20px">📋 我的待辦事項</h2><p class="muted" style="font-size:13px;margin:5px 0 0">單日／跨日・一般／重要／緊急・改期・進度備註</p></div><button class="btn primary" id="addTaskBtn">＋ 新增待辦</button></div>
+<div class="toolbar" id="filters"><button class="btn tab active" data-filter="active">未完成</button><button class="btn tab" data-filter="today">今日／延續</button><button class="btn tab" data-filter="overdue">逾期</button><button class="btn tab" data-filter="completed">已完成</button><button class="btn tab" data-filter="all">全部</button></div>
+<div id="taskList"></div></div>
+<div class="card"><div class="split"><div><h2 style="margin:0;font-size:20px">📊 工作甘特圖</h2><p class="muted" style="font-size:13px;margin:6px 0 0">依同一筆待辦資料自動顯示；不取代你原本案件排程</p></div><label class="pill-switch no-print">起始日期 <input type="date" id="ganttStart" class="btn" style="font-weight:400"></label></div><div class="gantt-scroll" id="gantt" style="margin-top:15px"></div><p class="note">薄荷綠＝預定工作期間、深綠色＝已完成、紅框＝正式截止日期；非工作日以灰色區別。此原型僅將週六日視為非工作日。</p></div>
+<div class="card"><div class="split"><div><h2 style="margin:0;font-size:20px">💬 07:30 LINE 提醒預覽</h2><p class="muted" style="font-size:13px;margin:5px 0 0">依日期、狀態及重要程度排序；最多顯示前 10 項</p></div><label class="pill-switch no-print">模擬日期 <input type="date" id="previewDate" class="btn preview-time" style="font-weight:400"></label></div><p class="note">這裡只模擬週一至週五。正式版會加入政府公布的國定假日與補假日；目前不會發送訊息。</p><div id="linePreview" class="msg"></div></div>
+<div class="footer">DC 工作助理 1.0 · 第 1 批可操作原型。測試後將依需求進行資料庫安全設計，與你確認後才會接正式系統。</div>
+</main>
+<div class="overlay" id="taskDialog" role="dialog" aria-modal="true" aria-labelledby="taskDialogTitle"><div class="dialog"><div class="split"><h2 id="taskDialogTitle">新增待辦</h2><button type="button" class="btn" id="closeTaskDialog">關閉 ×</button></div><form id="taskForm">
+<div class="grid"><label class="field" style="grid-column:1/-1">工作名稱 *<input id="taskName" required maxlength="160" placeholder="例如：整理審查意見回覆"></label><label class="field">所屬案件（可留空）<input id="taskProject" maxlength="90" placeholder="例如：中悅 19F"></label><label class="field">工作類型<select id="taskType"><option value="single">單日</option><option value="multi">跨日</option></select></label><label class="field">預定開始日 *<input id="taskStart" type="date" required></label><div class="row" style="grid-column:1/-1"><button class="btn mini" type="button" data-date-preset="today">今天</button><button class="btn mini" type="button" data-date-preset="next">下一工作日</button><button class="btn mini" type="button" data-date-preset="3">連續 3 工作日</button><button class="btn mini" type="button" data-date-preset="5">連續 5 工作日</button></div><label class="field" id="endField">預定結束日 *<input id="taskEnd" type="date"></label></div>
+<details id="advanced" style="margin-top:15px"><summary>⚙️ 進階設定（重要程度、正式截止日、備註）</summary><div class="grid"><label class="field">重要程度<select id="taskPriority"><option value="normal">一般</option><option value="important">重要</option><option value="urgent">緊急</option></select></label><label class="field">正式截止日<input id="taskDue" type="date"></label><label class="field">截止時間（選填）<input id="taskDueTime" type="time"></label><label class="field" style="grid-column:1/-1">工作備註<textarea id="taskNotes" rows="2" maxlength="2000" placeholder="選填，不會變成正式案件大事紀"></textarea></label></div></details>
+<p id="taskError" class="danger-text" role="alert" style="font-size:13px"></p><div class="row" style="justify-content:flex-end;margin-top:18px"><button type="button" class="btn" id="cancelTask">取消</button><button type="submit" class="btn primary">儲存待辦（本頁測試）</button></div>
+</form></div></div>
+<div class="overlay" id="progressDialog" role="dialog" aria-modal="true" aria-labelledby="progressTitle"><div class="dialog"><div class="split"><h2 id="progressTitle">工作進度備註</h2><button class="btn" id="closeProgress">關閉 ×</button></div><div class="field"><label for="progressText">進度內容</label><textarea id="progressText" rows="4" maxlength="2000" placeholder="例如：已整理第 1～5 項，明天繼續第 6～10 項"></textarea></div><p class="note">每次新增或修改都會建立時間記錄；編輯舊備註時保留先前版本。</p><div class="row" style="justify-content:flex-end;margin-top:15px"><button class="btn" id="cancelProgress">取消</button><button class="btn green" id="saveProgress">儲存進度</button></div></div></div>
+<div class="overlay" id="historyDialog" role="dialog" aria-modal="true" aria-labelledby="historyTitle"><div class="dialog"><div class="split"><h2 id="historyTitle">工作歷程</h2><button class="btn" id="closeHistory">關閉 ×</button></div><div id="historyBody"></div></div></div>
+<script>
+'use strict';
+// 離線試用版：不建立 Supabase Client，不進行任何網路要求、不寫入 localStorage。
+const $ = id => document.getElementById(id);
+const esc = s => String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const iso = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function taiwanToday(){const parts=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());const f=k=>parts.find(p=>p.type===k).value;return `${f('year')}-${f('month')}-${f('day')}`;}
+function toDate(s){let [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d,12);}
+function addDays(s,n){const d=toDate(s);d.setDate(d.getDate()+n);return iso(d);}
+function isWeekend(s){const d=toDate(s).getDay();return d===0||d===6;}
+function nextWeekday(s){let v=addDays(s,1);while(isWeekend(v))v=addDays(v,1);return v;}
+function forwardWorkdays(start,n){let v=start;for(let i=1;i<n;i++)v=nextWeekday(v);return v;}
+function previousWeekday(s){let v=s;while(isWeekend(v))v=addDays(v,-1);return v;}
+function fmt(s){if(!s)return '未設定';const d=toDate(s),week=['日','一','二','三','四','五','六'];return `${s.slice(5).replace('-','/')}（${week[d.getDay()]}）`;}
+function stamp(){return new Date().toLocaleString('zh-TW',{timeZone:'Asia/Taipei',hour12:false});}
+const today=taiwanToday();let next=nextWeekday(today),idCounter=50,changeCounter=10,filter='active';let editingId=null,progressTask=null,progressId=null;
+function makeTask(id,project,title,start,end,due,priority){return {id,project,title,start,end,due,dueTime:'',priority,notes:'',status:'open',completedAt:null,createdDate:today,progress:[],history:[{at:stamp(),label:'建立示意待辦',before:'',after:title}]};}
+let tasks=[makeTask(1,'示例案件 A','整理審查意見回覆',today,addDays(today,2),addDays(today,5),'urgent'),makeTask(2,'示例案件 B','確認修改圖面',today,today,addDays(today,1),'important'),makeTask(3,'示例案件 C','聯絡審查窗口',addDays(today,-5),addDays(today,-5),'','normal'),makeTask(4,'','整理本週會議資料',next,next,'','normal')];
+const priorityOrder={urgent:0,important:1,normal:2};const priName={urgent:'緊急',important:'重要',normal:'一般'};
+function category(t,date){if(t.status==='done')return 'done';if(t.due&&t.due<date)return 'overdue';if(t.due===date)return 'due';if(t.due&&priorityOrder[t.priority]<=1){const left=Math.round((toDate(t.due)-toDate(date))/86400000);if(left<=7&&left>0)return 'upcoming';}if(t.start<=date&&date<=t.end)return 'today';if(t.end<date)return 'carry';return 'future';}
+const catRank={overdue:0,due:1,upcoming:2,today:3,carry:4,future:5,done:6};const catName={overdue:'🚨 已逾期',due:'🔴 今日截止',upcoming:'🟠 即將截止',today:'📌 今日預定',carry:'🟡 延續未完成',future:'📅 未來安排',done:'✅ 已完成'};
+function sorted(date){return [...tasks].sort((a,b)=>catRank[category(a,date)]-catRank[category(b,date)] || priorityOrder[a.priority]-priorityOrder[b.priority] || (a.due||'9999').localeCompare(b.due||'9999') || a.start.localeCompare(b.start) || a.id-b.id);}
+function safeTitle(t){return esc((t.project?t.project+'｜':'')+t.title);}
+function renderStats(){const open=tasks.filter(t=>t.status==='open');$('stat-today').textContent=open.filter(t=>['overdue','due','upcoming','today','carry'].includes(category(t,today))).length;$('stat-urgent').textContent=open.filter(t=>t.priority!=='normal').length;$('stat-overdue').textContent=open.filter(t=>t.due&&t.due<today).length;$('stat-done').textContent=tasks.length-open.length;}
+function renderTasks(){const filtered=sorted(today).filter(t=>filter==='all'||(filter==='active'?t.status==='open':filter==='completed'?t.status==='done':filter==='overdue'?category(t,today)==='overdue':filter==='today'&&['overdue','due','upcoming','today','carry'].includes(category(t,today))));$('taskList').innerHTML=filtered.length?filtered.map(t=>{let c=category(t,today);const last=t.progress.length?t.progress[t.progress.length-1]:null;return `<article class="task"><div class="split"><div><h3>${safeTitle(t)}</h3><p class="muted">預定：${fmt(t.start)}${t.end!==t.start?' ～ '+fmt(t.end):''}　${t.due?'｜ 截止：'+fmt(t.due):''}</p></div><div class="row"><span class="tag ${esc(t.priority)}">${priName[t.priority]}</span><span class="tag ${t.status==='done'?'done':''}">${catName[c]}</span></div></div>${last?`<p>📝 最新進度：${esc(last.content)}</p>`:''}${t.notes?`<p class="muted">備註：${esc(t.notes)}</p>`:''}<div class="task-actions"><button class="btn mini ${t.status==='done'?'':'green'}" data-action="complete" data-id="${t.id}">${t.status==='done'?'↩ 恢復未完成':'✓ 標記完成'}</button><button class="btn mini" data-action="shift" data-id="${t.id}">📅 延後 1 工作日</button><button class="btn mini" data-action="edit" data-id="${t.id}">✏️ 編輯</button><button class="btn mini" data-action="progress" data-id="${t.id}">📝 新增進度</button><button class="btn mini" data-action="history" data-id="${t.id}">🕘 歷程 (${t.history.length})</button></div></article>`}).join(''):'<div class="empty">這個分類目前沒有待辦。</div>'}
+function renderGantt(){const start=$('ganttStart').value||today,days=Array.from({length:7},(_,i)=>addDays(start,i));let html='<table class="gantt-table"><thead><tr><th>案件／工作</th>'+days.map(d=>`<th class="${isWeekend(d)?'off':''}">${fmt(d)}</th>`).join('')+'</tr></thead><tbody>';for(const t of sorted(today)){html+=`<tr><td><strong>${safeTitle(t)}</strong><div class="muted">${priName[t.priority]}・${t.status==='done'?'已完成':'未完成'}</div></td>`+days.map(d=>{const scheduled=t.start<=d&&d<=t.end;const due=t.due===d;const cls=[scheduled?(t.status==='done'?'completed':'scheduled'):'',due?'due':'',isWeekend(d)?'off':''].join(' ');return `<td class="${cls}" title="${esc(t.title)} ${scheduled?'預定工作':''} ${due?'截止':''}">${due?'🚩':scheduled?(t.status==='done'?'✓':'●'):''}</td>`}).join('')+'</tr>'}html+='</tbody></table>';$('gantt').innerHTML=html;}
+function isIncluded(t,date){
+ if(t.status==='done')return false;
+ if(t.due&&t.due<=date)return true; // 逾期、今日截止（所有等級）
+ if(t.start<=date&&date<=t.end || t.end<date)return true; // 今日工作或未完成延續
+ if(t.due&&t.priority!=='normal'){
+  const advance=[7,3,1].some(days=>previousWeekday(addDays(t.due,-days))===date);
+  if(advance)return true;
+  // 新增時已錯過一個預警節點：下個工作日補一次，其他早報不重複。
+  const dayLeft=Math.round((toDate(t.due)-toDate(date))/86400000);
+  if(t.createdDate && date===nextWeekday(t.createdDate) && dayLeft>0 && dayLeft<=7 && [7,3,1].some(days=>previousWeekday(addDays(t.due,-days))<=t.createdDate))return true;
+ }
+ return false;
+}
+function renderLine(){const date=$('previewDate').value||today,box=$('linePreview');if(isWeekend(date)){box.textContent=`☀️ ${fmt(date)}｜模擬預覽\n\n今天是週末：不發一般工作提醒。\n（此原型尚未接政府國定假日資料。）`;return;}
+const list=sorted(date).filter(t=>isIncluded(t,date));let weekStart=toDate(date);weekStart.setDate(weekStart.getDate()-((weekStart.getDay()+6)%7));const monday=iso(weekStart),sun=addDays(monday,6);const weekly=tasks.filter(t=>t.status==='open' && t.start<=sun&&t.end>=monday);
+const firstWorkdayOfWeek=(()=>{let d=monday;while(isWeekend(d))d=addDays(d,1);return d;})();
+if(!list.length&&!(date===firstWorkdayOfWeek&&weekly.length)){box.textContent=`☀️ ${fmt(date)}｜07:30\n\n沒有需要提醒的待辦，依照你的規則不發 LINE。`;return;}
+let lines=[`☀️ ${fmt(date)}｜DC 工作助理`, `今日需要注意：${list.length} 項`, ''];list.slice(0,10).forEach((t,i)=>{const c=category(t,date);let tag=c==='overdue'?'🚨 逾期':c==='due'?'🔴 今日截止':c==='upcoming'?'🟠 截止預警':c==='today'?'📌 今日工作':'🟡 延續未完成';lines.push(`${i+1}. ${tag}｜${t.project?t.project+'｜':''}${t.title}${t.due?'（截止 '+fmt(t.due)+'）':''}`)});if(list.length>10)lines.push(`\n另外 ${list.length-10} 項未列出，請回系統查看。`);if(date===firstWorkdayOfWeek&&weekly.length)lines.push(`\n📅 本週工作表：${weekly.length} 項未完成工作（跨日只算一筆）`);box.textContent=lines.join('\n');}
+function render(){renderStats();renderTasks();renderGantt();renderLine();}
+function addHistory(t,label,before,after){t.history.push({at:stamp(),label,before:String(before??''),after:String(after??'')});}
+function toggleEnd(){$('endField').classList.toggle('hidden',$('taskType').value!=='multi');$('taskEnd').required=$('taskType').value==='multi';}
+function showModal(id=null){editingId=id;const t=tasks.find(x=>x.id===id);$('taskForm').reset();$('advanced').open=false;$('taskError').textContent='';$('taskDialogTitle').textContent=t?'編輯待辦':'新增待辦';$('taskName').value=t?.title||'';$('taskProject').value=t?.project||'';$('taskType').value=t?.end!==t?.start&&t?'multi':'single';$('taskStart').value=t?.start||today;$('taskEnd').value=t?.end||today;$('taskPriority').value=t?.priority||'normal';$('taskDue').value=t?.due||'';$('taskDueTime').value=t?.dueTime||'';$('taskNotes').value=t?.notes||'';if(t)$('advanced').open=true;toggleEnd();$('taskDialog').classList.add('open');$('taskName').focus();}
+function saveTask(e){e.preventDefault();const title=$('taskName').value.trim(),project=$('taskProject').value.trim(),start=$('taskStart').value,end=$('taskType').value==='multi' ? $('taskEnd').value : start,due=$('taskDue').value,priority=$('taskPriority').value,dueTime=$('taskDueTime').value,notes=$('taskNotes').value.trim();if(!title||!start||!end){$('taskError').textContent='請填寫工作名稱與日期。';return;}if(end<start){$('taskError').textContent='預定結束日不能早於開始日。';return;}if(due&&due<end&&!confirm('預定結束日比正式截止日晚，仍要儲存嗎？'))return;if((isWeekend(start)||isWeekend(end))&&!confirm('所選工作日期含週末（正式版也會檢查國定假日）。確定保留原日期？'))return;
+const fresh={title,project,start,end,due,dueTime,priority,notes};if(editingId){const t=tasks.find(x=>x.id===editingId);for(const [key,v] of Object.entries(fresh)){if(String(t[key]??'')!==String(v))addHistory(t,`修改 ${({title:'工作名稱',project:'所屬案件',start:'預定開始日',end:'預定結束日',due:'正式截止日',dueTime:'截止時間',priority:'重要程度',notes:'備註'})[key]}`,t[key],v);t[key]=v;}}else{tasks.push({...fresh,id:++idCounter,status:'open',completedAt:null,createdDate:today,progress:[],history:[{at:stamp(),label:'新增工作',before:'',after:title}]});}$('taskDialog').classList.remove('open');render();}
+function shift(t){if(t.status==='done'){alert('已完成工作請先恢復未完成，再調整預定日期。');return;}const old=t.start+' ～ '+t.end;t.start=nextWeekday(t.start);t.end=nextWeekday(t.end);addHistory(t,'預定工作延後 1 工作日',old,t.start+' ～ '+t.end);if(t.due&&t.end>t.due)alert('注意：新預定結束日已晚於正式截止日，正式截止日期未變更。');render();}
+function showProgress(t,id=null){progressTask=t.id;progressId=id;const p=t.progress.find(x=>x.id===id);$('progressText').value=p?.content||'';$('progressTitle').textContent=(p?'編輯':'新增')+'工作進度｜'+t.title;$('progressDialog').classList.add('open');$('progressText').focus();}
+function saveProgress(){let content=$('progressText').value.trim();if(!content){alert('請輸入進度內容。');return;}const t=tasks.find(x=>x.id===progressTask),p=t.progress.find(x=>x.id===progressId);if(p){if(p.content!==content){const old=p.content;p.versions.push({at:stamp(),content:old});p.content=content;addHistory(t,'編輯進度備註',old,content);}}else{t.progress.push({id:++changeCounter,content,at:stamp(),versions:[]});addHistory(t,'新增進度備註','',content);}$('progressDialog').classList.remove('open');render();}
+function showHistory(t){$('historyTitle').textContent='工作與進度歷程｜'+t.title;let html='<h3>📝 進度備註</h3>';html+=t.progress.length?t.progress.map(p=>`<div class="history"><small>建立於 ${esc(p.at)}｜歷史版本 ${p.versions.length} 筆</small><p>${esc(p.content)}</p><button class="btn mini" data-progress-edit="${p.id}" data-task="${t.id}">編輯備註</button>${p.versions.length?'<details><summary>展開舊版本</summary>'+p.versions.map(v=>`<div><small>${esc(v.at)}</small><p>${esc(v.content)}</p></div>`).join('')+'</details>':''}</div>`).join(''):'<p class="muted">尚無進度備註</p>';html+='<h3>🕘 全部修改紀錄</h3>';html+=[...t.history].reverse().map(h=>`<div class="history"><small>${esc(h.at)}｜${esc(h.label)}</small>${h.before?`<div class="muted">修改前：${esc(h.before)}</div>`:''}<div>修改後：${esc(h.after)}</div></div>`).join('');$('historyBody').innerHTML=html;$('historyDialog').classList.add('open');}
+$('addTaskBtn').onclick=()=>showModal();$('closeTaskDialog').onclick=$('cancelTask').onclick=()=>$('taskDialog').classList.remove('open');$('taskType').onchange=toggleEnd;document.querySelectorAll('[data-date-preset]').forEach(btn=>btn.onclick=()=>{const kind=btn.dataset.datePreset;let start=kind==='next'?nextWeekday(today):today;if(isWeekend(start))start=nextWeekday(addDays(start,-1));$('taskStart').value=start;if(kind==='3'||kind==='5'){$('taskType').value='multi';$('taskEnd').value=forwardWorkdays(start,Number(kind));}else{$('taskType').value='single';$('taskEnd').value=start;}toggleEnd();});$('taskForm').onsubmit=saveTask;$('closeProgress').onclick=$('cancelProgress').onclick=()=>$('progressDialog').classList.remove('open');$('saveProgress').onclick=saveProgress;$('closeHistory').onclick=()=>$('historyDialog').classList.remove('open');
+$('filters').onclick=e=>{const btn=e.target.closest('[data-filter]');if(!btn)return;filter=btn.dataset.filter;document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x===btn));renderTasks();};
+$('taskList').onclick=e=>{const b=e.target.closest('[data-action]');if(!b)return;const t=tasks.find(x=>x.id===Number(b.dataset.id));if(!t)return;switch(b.dataset.action){case'complete':{const old=t.status;t.status=old==='open'?'done':'open';t.completedAt=t.status==='done'?stamp():null;addHistory(t,t.status==='done'?'標記已完成':'恢復未完成',old,t.status);render();break;}case'shift':shift(t);break;case'edit':showModal(t.id);break;case'progress':showProgress(t);break;case'history':showHistory(t);break;}};
+$('historyBody').onclick=e=>{const b=e.target.closest('[data-progress-edit]');if(!b)return;const t=tasks.find(x=>x.id===Number(b.dataset.task));$('historyDialog').classList.remove('open');showProgress(t,Number(b.dataset.progressEdit));};
+$('previewDate').onchange=renderLine;$('ganttStart').onchange=renderGantt;$('previewDate').value=today;$('ganttStart').value=today;render();
+</script>
+</body></html>

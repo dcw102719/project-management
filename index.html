@@ -343,6 +343,12 @@
       </div>
     </div>
 
+    <!-- 已結案案件：排列在進行中案件下方、甘特圖上方；不參與全選、LINE 回報或列印 -->
+    <div id="completed-projects-section" class="mb-6 no-print hidden">
+      <h2 id="completed-projects-title" class="text-base font-bold text-slate-700 mb-3 border-l-4 border-emerald-600 pl-2">✅ 結案案件</h2>
+      <div id="completed-project-list" class="space-y-4"></div>
+    </div>
+
     <!-- ==================== 2. 近期重點案件與排程甘特圖 (置於畫面最下方，A4列印專用) ==================== -->
     <div id="report-top-section" class="mb-6 bg-white p-5 rounded-xl border border-slate-200 shadow-sm print-section">
       <section class="print-upper">
@@ -444,6 +450,7 @@
               <option value="摘要">摘要</option>
               <option value="紅/白皮書">紅/白皮書</option>
               <option value="結案資料">結案資料</option>
+              <option value="結案">結案</option>
             </select>
           </div>
           <div>
@@ -524,6 +531,7 @@
               <option value="摘要">摘要</option>
               <option value="紅/白皮書">紅/白皮書</option>
               <option value="結案資料">結案資料</option>
+              <option value="結案">結案</option>
             </select>
           </div>
           <div>
@@ -772,6 +780,11 @@
         if (newAssignee) { newAssignee.disabled = false; newAssignee.innerHTML = modalHtml; }
         if (editAssignee) { editAssignee.disabled = false; editAssignee.innerHTML = modalHtml; }
       }
+    }
+
+    // 結案為獨立狀態；「結案資料」仍視為進行中案件，不受新規則影響。
+    function isCompletedProject(project) {
+      return String(project?.status || '').trim() === '結案';
     }
 
     // 確保每筆案件有預設的甘特圖欄位狀態
@@ -1061,6 +1074,8 @@
 
     // 渲染對照表與甘特圖 (置於最下方)
     function renderTopReportSection(projects, reportRoot = document.getElementById('report-top-section'), skipControls = false) {
+      // 結案案件不列入對照表、甘特圖，也不顯示於甘特圖排程設定。
+      projects = projects.filter(p => !isCompletedProject(p));
       if (!skipControls) renderGanttSetupControls(projects);
 
       // 填入對照表
@@ -1157,7 +1172,10 @@
     function toggleSelectAll(selectAllEl) {
       const isChecked = selectAllEl.checked;
       const visibleCheckboxes = document.querySelectorAll('#project-list .card:not(.hidden) input[type="checkbox"]');
-      visibleCheckboxes.forEach(cb => cb.checked = isChecked);
+      visibleCheckboxes.forEach(cb => {
+        const p = projectsData.find(item => Number(item.id) === Number(cb.value));
+        cb.checked = !isCompletedProject(p) && isChecked;
+      });
     }
 
     // 展開完整大事紀／收起只看最後 5 則；保留各筆紀錄原始索引以利編輯、刪除。
@@ -1185,22 +1203,32 @@
 
     function renderProjectCards(projects, isReadOnly = false) {
       const listContainer = document.getElementById('project-list');
-      if (!projects || projects.length === 0) {
-        listContainer.innerHTML = '<div class="bg-white p-8 rounded-xl text-center text-slate-500">目前無您的案件紀錄</div>';
-        return;
-      }
+      const completedSection = document.getElementById('completed-projects-section');
+      const completedContainer = document.getElementById('completed-project-list');
+      const activeProjects = (projects || []).filter(p => !isCompletedProject(p));
+      const completedProjects = (projects || []).filter(isCompletedProject);
 
-      listContainer.innerHTML = projects.map(p => {
+      listContainer.innerHTML = activeProjects.length
+        ? activeProjects.map(p => renderProjectCard(p, isReadOnly)).join('')
+        : '<div class="bg-white p-8 rounded-xl text-center text-slate-500">目前無進行中的案件</div>';
+      completedSection.classList.toggle('hidden', completedProjects.length === 0);
+      completedContainer.innerHTML = completedProjects.map(p => renderProjectCard(p, isReadOnly)).join('');
+      document.getElementById('completed-projects-title').textContent = `✅ 結案案件（${completedProjects.length}）`;
+    }
+
+    function renderProjectCard(p, isReadOnly = false) {
         const logs = Array.isArray(p.logs) ? p.logs : [];
         const contacts = Array.isArray(p.contacts) ? p.contacts : [];
-        const logsExpanded = expandedLogProjectIds.has(p.id);
+        const isCompleted = isCompletedProject(p);
+        // 結案案件只顯示最新一則；其他紀錄保存在資料庫，重新改成非結案可再查看。
+        const logsExpanded = !isCompleted && expandedLogProjectIds.has(p.id);
 
         return `
-          <div id="project-card-${p.id}" class="card bg-white p-5 rounded-xl shadow-sm border border-slate-200 transition">
+          <div id="project-card-${p.id}" class="card bg-white p-5 rounded-xl shadow-sm border ${isCompleted ? 'border-emerald-200' : 'border-slate-200'} transition">
             <div class="flex items-start justify-between gap-3">
               <div class="flex items-center gap-3">
-                ${!isReadOnly ? `<input type="checkbox" id="check-${p.id}" value="${p.id}" class="no-print w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">` : ''}
-                <label for="check-${p.id}" class="font-bold text-lg text-slate-900 ${!isReadOnly ? 'cursor-pointer hover:text-indigo-600' : ''}">${p.title || '未命名案件'}</label>
+                ${!isReadOnly && !isCompleted ? `<input type="checkbox" id="check-${p.id}" value="${p.id}" class="no-print w-5 h-5 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer">` : ''}
+                <label ${!isReadOnly && !isCompleted ? `for="check-${p.id}"` : ''} class="font-bold text-lg text-slate-900 ${!isReadOnly && !isCompleted ? 'cursor-pointer hover:text-indigo-600' : ''}">${p.title || '未命名案件'}</label>
               </div>
               <div class="flex items-center gap-2">
                 ${!isReadOnly ? `
@@ -1233,7 +1261,7 @@
               <div class="flex items-center justify-between mb-2 gap-2">
                 <div class="flex items-center gap-2 flex-wrap">
                   <div class="text-xs font-semibold text-slate-400">大事紀歷程：</div>
-                  ${logs.length > 5 ? `
+                  ${!isCompleted && logs.length > 5 ? `
                     <button type="button" onclick="toggleLogHistory(${p.id})"
                       class="log-history-toggle no-print text-xs text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-2 py-0.5 rounded-md transition"
                       aria-expanded="${logsExpanded}" aria-controls="logs-${p.id}"
@@ -1250,7 +1278,7 @@
               </div>
               <ul id="logs-${p.id}" class="text-sm space-y-1 text-slate-700 pl-3 border-l-2 border-indigo-200">
                 ${logs.length > 0 ? logs.map((l, index) => `
-                  <li class="flex items-center justify-between py-0.5 ${index < logs.length - 5 ? `log-older-entry ${logsExpanded ? '' : 'hidden'}` : ''}">
+                  <li class="flex items-center justify-between py-0.5 ${isCompleted ? (index < logs.length - 1 ? 'hidden' : '') : (index < logs.length - 5 ? `log-older-entry ${logsExpanded ? '' : 'hidden'}` : '')}">
                     <div>
                       <span class="font-semibold text-slate-900">${l.date}</span>${l.event}
                     </div>
@@ -1266,7 +1294,6 @@
             </div>
           </div>
         `;
-      }).join('');
     }
 
     // 修改密碼 Modal
@@ -1371,7 +1398,7 @@
           alert('請先勾選要列印的案件！');
           return;
         }
-        selectedProjects = projectsData.filter(p => selectedIds.includes(Number(p.id)));
+        selectedProjects = projectsData.filter(p => !isCompletedProject(p) && selectedIds.includes(Number(p.id)));
       } else {
         // 歷史快照維持可列印；不修改唯讀資料。
         const snapshotSelect = document.getElementById('snapshot-select');
@@ -1380,7 +1407,12 @@
         if (currentUser.role !== 'admin') {
           selectedProjects = selectedProjects.filter(p => p.assignee === currentUser.name);
         }
+        selectedProjects = selectedProjects.filter(p => !isCompletedProject(p));
         ensureGanttDefaults(selectedProjects); // 快照資料在列印複本中補齊甘特圖預設日期
+      }
+      if (!selectedProjects.length) {
+        alert('目前沒有可列印的進行中案件。');
+        return;
       }
 
       const now = new Date();
@@ -1593,7 +1625,11 @@
         return;
       }
 
-      const selectedProjects = projectsData.filter(p => selectedIds.includes(p.id));
+      const selectedProjects = projectsData.filter(p => !isCompletedProject(p) && selectedIds.includes(Number(p.id)));
+      if (!selectedProjects.length) {
+        alert('目前沒有可回報的進行中案件。');
+        return;
+      }
       let textLines = [];
 
       selectedProjects.forEach(p => {
